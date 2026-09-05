@@ -226,7 +226,10 @@ async function mapLimit<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): 
 }
 
 export interface PartidaLista {
+  /** Rondas elegidas (corte de N). */
   tracks: HipsterTrack[]
+  /** Lista original completa: de aquí salen los distractores. */
+  pool: HipsterTrack[]
   descartados: number
 }
 
@@ -268,7 +271,7 @@ export async function prepararPartida(listaId: string, numRondas: number): Promi
       const j = Math.floor(Math.random() * (i + 1))
       ;[pool[i], pool[j]] = [pool[j], pool[i]]
     }
-    return { tracks: pool.slice(0, Math.min(n, pool.length)), descartados: 0 }
+    return { tracks: pool.slice(0, Math.min(n, pool.length)), pool: [...TRACKS], descartados: 0 }
   }
 
   let cache = leerCache(ref.id)
@@ -306,15 +309,15 @@ export async function prepararPartida(listaId: string, numRondas: number): Promi
     const j = Math.floor(Math.random() * (i + 1))
     ;[pool[i], pool[j]] = [pool[j], pool[i]]
   }
-  const tracks: HipsterTrack[] = pool.slice(0, Math.min(n, pool.length)).map((c) => ({
+  const aTrack = (c: Crudo): HipsterTrack => ({
     trackId: c.trackId,
     titulo: c.titulo,
     artista: c.artista,
     album: c.album,
     previewUrl: c.previewUrl,
     artworkUrl: c.artworkUrl
-  }))
-  return { tracks, descartados }
+  })
+  return { tracks: pool.slice(0, Math.min(n, pool.length)).map(aTrack), pool: completos.map(aTrack), descartados }
 }
 
 // ==================== Búsqueda libre (el host arma su lista) ====================
@@ -458,6 +461,7 @@ export async function prepararPartidaBusqueda(
   }
   return {
     tracks: pool.slice(0, Math.min(n, pool.length)),
+    pool: [...completos],
     descartados
   }
 }

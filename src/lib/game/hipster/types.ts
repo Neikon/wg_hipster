@@ -16,7 +16,10 @@ export interface HipsterConfig {
 export interface HipsterState {
   phase: 'lobby' | 'pregunta' | 'resultados' | 'final'
   ronda: number
+  /** Rondas elegidas (corte de N). */
   tracks: HipsterTrack[]
+  /** Lista original completa: de aquí salen los distractores. */
+  pool: HipsterTrack[]
   clipUrl: string
   opciones: string[]
   respuestaCorrecta: number
@@ -29,7 +32,7 @@ export interface HipsterState {
 }
 
 export type HipsterAction =
-  | { t: 'startGame'; juegoId?: 'hipster'; config?: Partial<HipsterConfig>; tracks?: HipsterTrack[] }
+  | { t: 'startGame'; juegoId?: 'hipster'; config?: Partial<HipsterConfig>; tracks?: HipsterTrack[]; pool?: HipsterTrack[] }
   | { t: 'answer'; opcion: number }
   | { t: 'tick' }
   | { t: 'next' }

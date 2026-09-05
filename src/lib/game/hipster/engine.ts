@@ -38,18 +38,29 @@ function rng(seed: number): () => number {
   }
 }
 
+/**
+ * Distractores desde la lista original completa (pool), no del corte de N
+ * rondas: excluye el track actual, baraja con semilla de ronda y coge 3.
+ */
 function buildRonda(
   tracks: HipsterTrack[],
+  pool: HipsterTrack[],
   idx: number
 ): Pick<HipsterState, 'clipUrl' | 'opciones' | 'respuestaCorrecta'> {
   const track = tracks[idx % tracks.length]
   const correcta = label(track)
-  const distractores = tracks
-    .filter((_, i) => i % tracks.length !== idx % tracks.length)
-    .slice(0, 3)
-    .map(label)
-  // Barajar con semilla de la ronda: determinista (mismo estado → mismo orden).
-  const rand = rng(track.trackId * 31 + idx * 101 + tracks.length)
+  const fuente = pool.length >= 4 ? pool : tracks
+  const rand = rng(track.trackId * 31 + idx * 101 + fuente.length)
+  const candidatos = fuente.filter((t) => t.trackId !== track.trackId).map(label)
+  // quitar duplicados de etiqueta (mismo título de otro álbum) y barajar
+  const vistos = new Set<string>()
+  const unicos = candidatos.filter((l) => (vistos.has(l) ? false : (vistos.add(l), true)))
+  for (let i = unicos.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[unicos[i], unicos[j]] = [unicos[j], unicos[i]]
+  }
+  const distractores = unicos.slice(0, 3)
+  // Barajar opciones con la misma semilla: determinista (mismo estado → mismo orden).
   const opciones = [correcta, ...distractores]
   for (let i = opciones.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1))
@@ -66,6 +77,7 @@ export function createInitialState(peers: { id: string }[], config: Partial<Hips
     phase: 'lobby',
     ronda: 0,
     tracks: [],
+    pool: [],
     clipUrl: '',
     opciones: [],
     respuestaCorrecta: 0,
@@ -95,8 +107,10 @@ export function reducer(
     if (!ctx.isHost) return state
     if (state.phase !== 'lobby' && state.phase !== 'final') return state
     // La partida solo arranca con rondas 100 % completas (inyectadas por el host).
+    // El pool (lista original) viaja también: de ahí salen los distractores.
     const tracks = tracksValidos(action.tracks) ? action.tracks : null
     if (!tracks) return state
+    const pool = tracksValidos(action.pool) ? action.pool : tracks
     const config = normalizeConfig(action.config ?? state.config)
     const ronda = 0
     return {
@@ -104,7 +118,8 @@ export function reducer(
       phase: 'pregunta',
       ronda,
       tracks,
-      ...buildRonda(tracks, ronda),
+      pool,
+      ...buildRonda(tracks, pool, ronda),
       respuestas: {},
       timer: config.segundos,
       config,
@@ -140,7 +155,7 @@ export function reducer(
       ...state,
       phase: 'pregunta',
       ronda: nr,
-      ...buildRonda(state.tracks, nr),
+      ...buildRonda(state.tracks, state.pool, nr),
       respuestas: {},
       timer: state.config.segundos,
       version: state.version + 1

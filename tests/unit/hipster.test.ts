@@ -7,8 +7,12 @@ import type { HipsterTrack } from '../../src/lib/game/hipster/types'
 const host = { isHost: true, peerId: 'host1' }
 const guest = { isHost: false, peerId: 'guest1' }
 
-function empezar(s: ReturnType<typeof createInitialState>, tracks: HipsterTrack[] = [...TRACKS]) {
-  return reducer(s, { t: 'startGame', juegoId: 'hipster', tracks }, host)
+function empezar(
+  s: ReturnType<typeof createInitialState>,
+  tracks: HipsterTrack[] = [...TRACKS],
+  pool: HipsterTrack[] = [...TRACKS]
+) {
+  return reducer(s, { t: 'startGame', juegoId: 'hipster', tracks, pool }, host)
 }
 
 describe('hipster engine', () => {
@@ -48,6 +52,62 @@ describe('hipster engine', () => {
     expect(n.clipUrl).toMatch(/^https:\/\//)
     expect(n.opciones).toHaveLength(4)
     expect(n.version).toBe(1)
+  })
+
+  it('baraja las opciones: la correcta varía y es determinista', () => {
+    const a = empezar(createInitialState([{ id: 'host1' }]))
+    const b = empezar(createInitialState([{ id: 'host1' }]))
+    // mismo estado inicial → mismo orden (reducer puro)
+    expect(a.opciones).toEqual(b.opciones)
+    expect(a.respuestaCorrecta).toBe(b.respuestaCorrecta)
+    // la correcta no está siempre en A: varía entre rondas
+    const posiciones = new Set<number>()
+    let cur = a
+    posiciones.add(cur.respuestaCorrecta)
+    for (let i = 0; i < 4; i++) {
+      cur = reducer(cur, { t: 'answer', opcion: cur.respuestaCorrecta }, { isHost: false, peerId: 'host1' })
+      cur = reducer(cur, { t: 'next' }, host)
+      if (cur.phase === 'pregunta') posiciones.add(cur.respuestaCorrecta)
+    }
+    expect(posiciones.size).toBeGreaterThan(1)
+    // la opción correcta contiene el título del track de la ronda
+    expect(a.opciones[a.respuestaCorrecta]).toContain(TRACKS[0].titulo)
+  })
+
+  it('los distractores salen del pool completo, no del corte de rondas', () => {
+    const extra: HipsterTrack[] = [6, 7, 8].map((i) => ({
+      trackId: 1000 + i,
+      titulo: `Extra ${i}`,
+      artista: `Artista ${i}`,
+      album: '',
+      previewUrl: `https://extra${i}.m4a`,
+      artworkUrl: ''
+    }))
+    const corte = [...TRACKS].slice(0, 4)
+    const pool = [...corte, ...extra]
+    const s = empezar(createInitialState([{ id: 'host1' }]), corte, pool)
+    expect(s.pool).toHaveLength(7)
+    // en 4 rondas con corte de 4, algún distractor debe venir del extra
+    const etiquetasCorte = new Set(corte.map((t) => `${t.titulo} – ${t.artista}`))
+    let hayDeFuera = false
+    let cur = s
+    for (let i = 0; i < 4; i++) {
+      if (cur.phase !== 'pregunta') break
+      if (cur.opciones.some((o) => !etiquetasCorte.has(o))) hayDeFuera = true
+      cur = reducer(cur, { t: 'answer', opcion: cur.respuestaCorrecta }, { isHost: false, peerId: 'host1' })
+      cur = reducer(cur, { t: 'next' }, host)
+    }
+    expect(hayDeFuera).toBe(true)
+  })
+
+  it('sin pool válido usa las rondas como distractores', () => {
+    const s = reducer(
+      createInitialState([{ id: 'host1' }]),
+      { t: 'startGame', juegoId: 'hipster', tracks: [...TRACKS] },
+      host
+    )
+    expect(s.phase).toBe('pregunta')
+    expect(s.opciones).toHaveLength(4)
   })
 
   it('baraja las opciones: la correcta varía y es determinista', () => {

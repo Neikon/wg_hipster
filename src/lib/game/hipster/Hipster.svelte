@@ -18,6 +18,7 @@
   let cargando = false
   let cargaError = ''
   let tracks: HipsterTrack[] | null = null
+  let pool: HipsterTrack[] | null = null
   let descartados = 0
   // Búsqueda libre del host
   let textoBusq = ''
@@ -37,6 +38,7 @@
   // Si el host cambia de lista, rondas o selección, hay que volver a cargar.
   $: if (tracks && (listaId !== cargadaPara?.listaId || numRondas !== cargadaPara?.numRondas || claveSel !== (cargadaPara?.busq ?? ''))) {
     tracks = null
+    pool = null
     descartados = 0
   }
   let cargadaPara: { listaId: string; numRondas: number; busq: string } | null = null
@@ -45,11 +47,13 @@
     cargando = true
     cargaError = ''
     tracks = null
+    pool = null
     try {
       const r = listaId === BUSCAR_ID && seleccion
         ? await prepararPartidaBusqueda(seleccion, numRondas)
         : await prepararPartida(listaId, numRondas)
       tracks = r.tracks
+      pool = r.pool
       descartados = r.descartados
       cargadaPara = { listaId, numRondas, busq: claveSel }
     } catch (e) {
@@ -77,6 +81,7 @@
   function elegir(r: ResultadoBusqueda){
     seleccion = r
     tracks = null
+    pool = null
     descartados = 0
     void cargar()
   }
@@ -86,8 +91,8 @@
     onAction({ t:'answer', opcion })
   }
   function start(){
-    if (!tracks) return
-    onAction({ t:'startGame', juegoId:'hipster', config: { segundos, listaId, numRondas }, tracks })
+    if (!tracks || !pool) return
+    onAction({ t:'startGame', juegoId:'hipster', config: { segundos, listaId, numRondas }, tracks, pool })
   }
   function next(){ onAction({ t:'next' }) }
   function restart(){ onAction({ t:'restart' }) }
