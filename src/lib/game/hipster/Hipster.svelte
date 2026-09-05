@@ -21,7 +21,7 @@
   let descartados = 0
   // Búsqueda libre del host
   let textoBusq = ''
-  let filtroTipos: TipoBusqueda[] = ['album', 'artista', 'cancion']
+  let filtroTipos: TipoBusqueda[] = ['album', 'artista', 'cancion', 'lista']
   let buscando = false
   let busqError = ''
   let resultados: ResultadoBusqueda[] = []
@@ -145,10 +145,10 @@
         </label>
         {#if listaId === BUSCAR_ID}
           <div style="display:grid;gap:0.5rem">
-            <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
-              Buscar por
+            <fieldset style="border:0;margin:0;padding:0;display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
+              <legend style="padding:0">Buscar por</legend>
               <span style="display:flex;gap:0.6rem;flex-wrap:wrap">
-                {#each [['album', 'Álbumes'], ['artista', 'Artistas'], ['cancion', 'Canciones']] as [v, etiqueta]}
+                {#each [['album', 'Álbumes'], ['artista', 'Artistas'], ['cancion', 'Canciones'], ['lista', 'Listas']] as [v, etiqueta]}
                   {@const val = v as TipoBusqueda}
                   <label style="display:flex;gap:0.3rem;align-items:center;color:var(--fg);font-size:0.85rem">
                     <input
@@ -163,7 +163,7 @@
                   </label>
                 {/each}
               </span>
-            </label>
+            </fieldset>
             <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
               Buscar álbum, artista o canción
               <span style="display:flex;gap:0.4rem">
@@ -188,7 +188,7 @@
                       style="display:flex;gap:0.6rem;align-items:center;width:100%;text-align:left;background:{(r.tipo !== 'cancion' && seleccion?.id===r.id && seleccion?.tipo===r.tipo) || (r.tipo === 'cancion' && miSeleccion.some((t)=>t.trackId===r.id)) ? 'var(--success)' : 'var(--card)'};border:1px solid var(--muted)"
                     >
                       {#if r.artworkUrl}<img src={r.artworkUrl} alt="" width="40" height="40" style="border-radius:4px" />{/if}
-                      <span><strong>{r.nombre}</strong><br /><small class="muted">{r.tipo === 'album' ? 'Álbum' : r.tipo === 'artista' ? 'Artista' : 'Canción'}{r.tipo === 'cancion' ? ' · toca para añadir' : ` · ${r.subtitulo}`}</small></span>
+                      <span><strong>{r.nombre}</strong><br /><small class="muted">{r.tipo === 'album' ? 'Álbum' : r.tipo === 'artista' ? 'Artista' : r.tipo === 'lista' ? 'Lista' : 'Canción'}{r.tipo === 'cancion' ? ' · toca para añadir' : ` · ${r.subtitulo}`}</small></span>
                     </button>
                   </li>
                 {/each}

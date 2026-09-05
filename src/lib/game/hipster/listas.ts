@@ -55,8 +55,7 @@ function mapLookup(r: any): Crudo | null {
   }
 }
 
-async function fetchJson(url: string, timeoutMs = 12000): Promise<any> {
-  const ctrl = new AbortController()
+async function fetchJson(url: string, timeoutMs = 12000): Promise<any> {  const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const res = await fetch(url, { signal: ctrl.signal })
@@ -78,6 +77,80 @@ async function fetchConReintentos(url: string, intentos = 2): Promise<any> {
     }
   }
   throw last
+}
+
+let jsonpSeq = 0
+
+/**
+ * Lee la API pública de Deezer por JSONP (<script> en vez de fetch),
+ * porque no envía cabecera CORS y el navegador bloquearía la lectura.
+ */
+export function jsonp<T>(baseUrl: string, timeoutMs = 12000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    if (typeof document === 'undefined') {
+      reject(new Error('JSONP solo disponible en navegador'))
+      return
+    }
+    const cb = `__dz${Date.now()}_${jsonpSeq++}`
+    const sep = baseUrl.includes('?') ? '&' : '?'
+    const script = document.createElement('script')
+    const limpiar = () => {
+      clearTimeout(timer)
+      script.remove()
+      try {
+        delete (window as any)[cb]
+      } catch {
+        ;(window as any)[cb] = undefined
+      }
+    }
+    const timer = setTimeout(() => {
+      limpiar()
+      reject(new Error('Tiempo agotado'))
+    }, timeoutMs)
+    ;(window as any)[cb] = (data: T) => {
+      limpiar()
+      resolve(data)
+    }
+    script.onerror = () => {
+      limpiar()
+      reject(new Error('No se pudo cargar'))
+    }
+    script.src = `${baseUrl}${sep}output=jsonp&callback=${cb}`
+    document.head.appendChild(script)
+  })
+}
+
+/** Mapea un track de Deezer a nuestro formato (exportado para tests). */
+export function mapTrackDeezer(r: any): Crudo | null {
+  if (!r || typeof r.title !== 'string' || !r.artist?.name) return null
+  return {
+    trackId: Number(r.id) || 0,
+    titulo: r.title,
+    artista: r.artist.name,
+    album: r.album?.title ?? '',
+    previewUrl: typeof r.preview === 'string' ? r.preview : '',
+    artworkUrl: r.album?.cover_medium ?? r.artist?.picture_medium ?? ''
+  }
+}
+
+/** Descarga los tracks de una playlist de Deezer (paginado, vía JSONP). */
+export async function fetchPlaylistDeezer(playlistId: number, max = 200): Promise<Crudo[]> {
+  const out: Crudo[] = []
+  let index = 0
+  while (out.length < max) {
+    const d = await jsonp<{ data?: any[]; total?: number }>(
+      `https://api.deezer.com/playlist/${playlistId}/tracks?limit=100&index=${index}`
+    )
+    const items = d?.data ?? []
+    for (const r of items) {
+      const m = mapTrackDeezer(r)
+      if (m) out.push(m)
+    }
+    if (items.length < 100) break
+    index += 100
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  return out
 }
 
 interface EntradaRSS {
@@ -240,7 +313,7 @@ export async function prepararPartida(listaId: string, numRondas: number): Promi
 
 // ==================== Búsqueda libre (el host arma su lista) ====================
 
-export type TipoBusqueda = 'album' | 'artista' | 'cancion'
+export type TipoBusqueda = 'album' | 'artista' | 'cancion' | 'lista'
 
 export interface ResultadoBusqueda {
   tipo: TipoBusqueda
@@ -253,8 +326,7 @@ export interface ResultadoBusqueda {
 }
 
 function mapResultado(r: any, tipo: TipoBusqueda): ResultadoBusqueda | null {
-  if (tipo === 'cancion') {
-    const m = mapLookup(r)
+  if (tipo === 'cancion') {    const m = mapLookup(r)
     if (!m?.previewUrl) return null
     return {
       tipo,
@@ -266,6 +338,16 @@ function mapResultado(r: any, tipo: TipoBusqueda): ResultadoBusqueda | null {
     }
   }
   const nombre = tipo === 'album' ? r?.collectionName : r?.artistName
+  if (tipo === 'lista') {
+    if (!r || typeof r.title !== 'string' || !Number.isFinite(Number(r.id))) return null
+    return {
+      tipo,
+      id: Number(r.id),
+      nombre: r.title,
+      subtitulo: `${r.nb_tracks ?? '?'} canciones`,
+      artworkUrl: r.picture_medium ?? r.picture_small ?? ''
+    }
+  }
   if (!r || typeof nombre !== 'string' || !Number.isFinite(Number(tipo === 'album' ? r.collectionId : r.artistId))) {
     return null
   }
@@ -279,13 +361,13 @@ function mapResultado(r: any, tipo: TipoBusqueda): ResultadoBusqueda | null {
 }
 
 /**
- * Busca en iTunes con filtro por tipos (p. ej. "80s", "Queen").
- * Nota: iTunes sin login no ofrece "listas/playlist" (eso exige Apple Music
- * con cuenta); aquí se cubre con álbumes, artistas y canciones sueltas.
+ * Busca en iTunes (álbumes, artistas, canciones) y en Deezer (playlists).
+ * Nota: las playlists solo existen en Deezer; como su API no envía CORS,
+ * se leen por JSONP (<script>) en vez de fetch. iTunes va por fetch.
  */
 export async function buscarEnItunes(
   query: string,
-  tipos: TipoBusqueda[] = ['album', 'artista', 'cancion'],
+  tipos: TipoBusqueda[] = ['album', 'artista', 'cancion', 'lista'],
   country = 'ES'
 ): Promise<ResultadoBusqueda[]> {
   const q = query.trim()
@@ -322,6 +404,13 @@ export async function buscarEnItunes(
         .then((d) => ({ tipo: 'cancion' as const, d }))
     )
   }
+  if (tipos.includes('lista')) {
+    peticiones.push(
+      jsonp<{ data?: any[] }>(`https://api.deezer.com/search/playlist?q=${term}&limit=8`)
+        .catch(() => null)
+        .then((d) => ({ tipo: 'lista' as const, d: d ? { results: d.data } : null }))
+    )
+  }
   if (peticiones.length === 0) return []
   const res = await Promise.all(peticiones)
   if (res.every((r) => !r.d)) throw new Error('No se pudo buscar (¿sin conexión?)')
@@ -336,8 +425,9 @@ export async function buscarEnItunes(
 }
 
 /**
- * Convierte un álbum o artista elegido en rondas completas:
- * álbum → sus canciones por lookup; artista → sus top-canciones por search.
+ * Convierte un álbum, artista o playlist elegidos en rondas completas:
+ * álbum → sus canciones por lookup; artista → sus top-canciones por search;
+ * playlist (Deezer, vía JSONP) → sus tracks directos.
  */
 export async function prepararPartidaBusqueda(
   sel: ResultadoBusqueda,
@@ -349,13 +439,17 @@ export async function prepararPartidaBusqueda(
   const cacheKey = `busq:${sel.tipo}:${sel.id}`
   let crudos = leerCache(cacheKey)
   if (!crudos) {
-    let candidatos: any[]
+    let candidatos: any[] = []
     try {
       if (sel.tipo === 'album') {
         const d = await fetchConReintentos(
           `https://itunes.apple.com/lookup?id=${sel.id}&country=${country}&entity=song`
         )
         candidatos = (d?.results ?? []).filter((r: any) => r?.wrapperType === 'track' && r?.kind === 'song')
+      } else if (sel.tipo === 'lista') {
+        const tracks = await fetchPlaylistDeezer(sel.id)
+        crudos = tracks
+        guardarCache(cacheKey, crudos)
       } else {
         const d = await fetchConReintentos(
           `https://itunes.apple.com/search?term=${encodeURIComponent(sel.nombre)}&media=music&entity=song&limit=30&country=${country}&attribute=artistTerm`
@@ -365,9 +459,12 @@ export async function prepararPartidaBusqueda(
     } catch {
       throw new Error('No se pudo descargar la selección (¿sin conexión?)')
     }
-    crudos = candidatos.map(mapLookup).filter(Boolean) as Crudo[]
-    guardarCache(cacheKey, crudos)
+    if (sel.tipo !== 'lista') {
+      crudos = candidatos.map(mapLookup).filter(Boolean) as Crudo[]
+      guardarCache(cacheKey, crudos)
+    }
   }
+  if (!crudos) throw new Error('No se pudo descargar la selección (¿sin conexión?)')
   const completos = crudos.filter((c) => !!c.previewUrl)
   const descartados = crudos.length - completos.length
   if (completos.length < 4) {

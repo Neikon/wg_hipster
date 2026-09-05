@@ -135,8 +135,8 @@ test('el host filtra por canciones y arma su selección', async ({ page }) => {
   await page.goto('#/sala/sel001?host=1&name=Ana')
   await page.getByLabel('Lista de canciones').selectOption('__buscar__')
   // solo canciones: desmarcar álbumes y artistas
-  await page.getByText('Álbumes').click()
-  await page.getByText('Artistas').click()
+  await page.getByRole('checkbox', { name: 'Álbumes', exact: true }).click()
+  await page.getByRole('checkbox', { name: 'Artistas', exact: true }).click()
   await page.getByLabel('Texto a buscar').fill('fiesta')
   await page.getByRole('button', { name: '🔍' }).click()
   for (let i = 1; i <= 4; i++) {
@@ -145,6 +145,45 @@ test('el host filtra por canciones y arma su selección', async ({ page }) => {
   await expect(page.getByRole('button', { name: /Jugar con mi selección \(4\)/ })).toBeVisible()
   await page.getByRole('button', { name: /Jugar con mi selección/ }).click()
   await expect(page.getByText(/Lista ✓ 4 rondas/)).toBeVisible()
+  await page.getByRole('button', { name: /Empezar hipster/ }).click()
+  await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+})
+
+test('el host busca una playlist de Deezer y juega', async ({ page }) => {
+  const track = (id: number) => ({
+    id,
+    title: `Tema ${id}`,
+    artist: { name: 'Artista' },
+    album: { title: 'Álbum', cover_medium: 'https://img/cover.jpg' },
+    preview: `https://clip${id}.mp3`
+  })
+  // JSONP: el callback va en la query (?callback=__dz...); respondemos envolviendo el JSON
+  await page.route('https://api.deezer.com/search/playlist?*', (route) => {
+    const cb = new URL(route.request().url()).searchParams.get('callback') ?? 'cb'
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `${cb}({"data":[{"id":999,"title":"Fiesta 80s","nb_tracks":5,"picture_medium":"https://img/pl.jpg"}]})`
+    })
+  })
+  await page.route('https://api.deezer.com/playlist/999/tracks?*', (route) => {
+    const cb = new URL(route.request().url()).searchParams.get('callback') ?? 'cb'
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `${cb}({"data":[${[1, 2, 3, 4, 5].map((i) => JSON.stringify(track(i))).join(',')}]})`
+    })
+  })
+  // iTunes no debe intervenir en este flujo
+  await page.route('https://itunes.apple.com/*', (route) => route.fulfill({ json: { results: [], resultCount: 0 } }))
+
+  await page.goto('#/sala/lis001?host=1&name=Ana')
+  await page.getByLabel('Lista de canciones').selectOption('__buscar__')
+  await page.getByRole('checkbox', { name: 'Álbumes', exact: true }).click()
+  await page.getByRole('checkbox', { name: 'Artistas', exact: true }).click()
+  await page.getByRole('checkbox', { name: 'Canciones', exact: true }).click()
+  await page.getByLabel('Texto a buscar').fill('fiesta 80s')
+  await page.getByRole('button', { name: '🔍' }).click()
+  await page.getByRole('button', { name: /Fiesta 80s/ }).click()
+  await expect(page.getByText(/Lista ✓ 5 rondas/)).toBeVisible()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
 })

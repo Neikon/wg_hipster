@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createInitialState, reducer } from '../../src/lib/game/hipster/engine'
 import { TRACKS } from '../../src/lib/game/hipster/tracks'
-import { LISTAS, buscarEnItunes, prepararPartida, prepararPartidaBusqueda } from '../../src/lib/game/hipster/listas'
+import { LISTAS, buscarEnItunes, mapTrackDeezer, prepararPartida, prepararPartidaBusqueda } from '../../src/lib/game/hipster/listas'
 import type { HipsterTrack } from '../../src/lib/game/hipster/types'
 
 const host = { isHost: true, peerId: 'host1' }
@@ -190,7 +190,7 @@ describe('listas', () => {
         return { ok: true, json: async () => ({ results: [{ artistId: 22, artistName: 'Queen', primaryGenreName: 'Rock' }] }) }
       })
     )
-    const r = await buscarEnItunes('80s')
+    const r = await buscarEnItunes('80s', ['album', 'artista', 'cancion'])
     expect(r).toHaveLength(3)
     expect(r[0]).toMatchObject({ tipo: 'album', id: 11, nombre: 'Álbum 80s' })
     expect(r[1]).toMatchObject({ tipo: 'artista', id: 22, nombre: 'Queen' })
@@ -226,5 +226,18 @@ describe('listas', () => {
     const r = await prepararPartidaBusqueda({ tipo: 'album', id: 11, nombre: 'Álbum', subtitulo: '', artworkUrl: '' }, 5)
     expect(r.tracks).toHaveLength(5)
     for (const t of r.tracks) expect(t.previewUrl).toMatch(/^https:\/\//)
+  })
+
+  it('mapTrackDeezer mapea tracks de playlist', () => {
+    const m = mapTrackDeezer({
+      id: 7,
+      title: 'Tema P',
+      artist: { name: 'Art P' },
+      album: { title: 'Alb', cover_medium: 'https://cover' },
+      preview: 'https://clip.mp3'
+    })
+    expect(m).toMatchObject({ trackId: 7, titulo: 'Tema P', artista: 'Art P', previewUrl: 'https://clip.mp3' })
+    expect(mapTrackDeezer({ id: 8, title: 'Sin audio', artist: { name: 'X' }, preview: '' })?.previewUrl).toBe('')
+    expect(mapTrackDeezer(null)).toBeNull()
   })
 })
