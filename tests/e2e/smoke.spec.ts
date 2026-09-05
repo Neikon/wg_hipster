@@ -172,13 +172,13 @@ test('modo año: se escribe el año y vale ±5', async ({ page }) => {
   await expect(page.getByText(/Año correcto:/)).toBeVisible()
 })
 
-test('dificultad: fácil muestra artista y pista, difícil nada', async ({ page }) => {
+test('dificultad: fácil muestra artista y título, difícil nada', async ({ page }) => {
   await page.goto('#/sala/dif001?host=1&name=Ana')
   await page.getByLabel('Dificultad').selectOption('facil')
   await page.getByRole('button', { name: /Cargar lista/ }).click()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
   await expect(page.getByText(/🎤 Artista:/)).toBeVisible()
-  await expect(page.getByText(/🔤 Pista:/)).toBeVisible()
+  await expect(page.getByText(/🔤 Título:/)).toBeVisible()
   for (let i = 0; i < 5; i++) {
     await page.getByRole('button', { name: /^A\. / }).click()
     await page.getByRole('button', { name: 'Siguiente' }).click()
@@ -190,4 +190,18 @@ test('dificultad: fácil muestra artista y pista, difícil nada', async ({ page 
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
   await expect(page.getByText(/🎤 Artista:/)).toBeHidden()
+})
+
+test('pistas: selección múltiple muestra la info elegida', async ({ page }) => {
+  await page.goto('#/sala/pis001?host=1&name=Ana')
+  // fácil marca todas; desmarcar todo menos álbum
+  await page.getByLabel('Dificultad').selectOption('facil')
+  await page.getByRole('checkbox', { name: 'Título', exact: true }).click()
+  await page.getByRole('checkbox', { name: 'Artista', exact: true }).click()
+  await page.getByRole('checkbox', { name: 'Año', exact: true }).click()
+  await page.getByRole('button', { name: /Cargar lista/ }).click()
+  await page.getByRole('button', { name: /Empezar hipster/ }).click()
+  await expect(page.getByText(/💿 Álbum:/)).toBeVisible()
+  await expect(page.getByText(/🎤 Artista:/)).toBeHidden()
+  await expect(page.getByText(/🔤 Título:/)).toBeHidden()
 })

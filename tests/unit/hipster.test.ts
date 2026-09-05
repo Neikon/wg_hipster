@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { createInitialState, margenPara, reducer } from '../../src/lib/game/hipster/engine'
+import { createInitialState, margenPara, pistasPara, reducer } from '../../src/lib/game/hipster/engine'
 import { TRACKS, pistaTitulo } from '../../src/lib/game/hipster/tracks'
 import { LISTAS, LISTA_FALLBACK, buscarEnItunes, getLista, mapTrackDeezer, prepararPartida, prepararPartidaBusqueda } from '../../src/lib/game/hipster/listas'
 import type { HipsterTrack } from '../../src/lib/game/hipster/types'
@@ -215,6 +215,18 @@ describe('hipster engine', () => {
 
     // dificultad inválida → normal
     expect(createInitialState([{ id: 'h' }], { dificultad: 'extrema' as never }).config.dificultad).toBe('normal')
+  })
+
+  it('pistas: presets por dificultad y saneado', () => {
+    expect(pistasPara('facil')).toEqual(['titulo', 'artista', 'anio', 'album'])
+    expect(pistasPara('normal')).toEqual(['artista'])
+    expect(pistasPara('dificil')).toEqual([])
+    expect(createInitialState([{ id: 'h' }]).config.pistas).toEqual(['artista'])
+    expect(
+      createInitialState([{ id: 'h' }], { pistas: ['album', 'anio', 'invalida' as never] }).config.pistas
+    ).toEqual(['album', 'anio'])
+    const s = empezar(createInitialState([{ id: 'host1' }], { pistas: ['album'] }))
+    expect(s.config.pistas).toEqual(['album'])
   })
 
   it('ignora duplicados y opciones inválidas', () => {

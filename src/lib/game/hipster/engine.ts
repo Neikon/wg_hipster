@@ -1,7 +1,20 @@
-import type { HipsterAction, HipsterConfig, HipsterState, HipsterTrack, Dificultad, ModoJuego } from './types'
+import type { HipsterAction, HipsterConfig, HipsterState, HipsterTrack, Dificultad, ModoJuego, Pista } from './types'
 import { label } from './tracks'
 
-export const DEFAULT_CONFIG: HipsterConfig = { segundos: 60, listaId: 'fiesta-clasicos', numRondas: 5, modo: 'titulo', dificultad: 'normal' }
+export const DEFAULT_CONFIG: HipsterConfig = {
+  segundos: 60,
+  listaId: 'fiesta-clasicos',
+  numRondas: 5,
+  modo: 'titulo',
+  dificultad: 'normal',
+  pistas: ['artista']
+}
+/** Presets del selector Pistas según dificultad (luego ajustables). */
+export function pistasPara(dificultad: Dificultad): Pista[] {
+  if (dificultad === 'facil') return ['titulo', 'artista', 'anio', 'album']
+  if (dificultad === 'dificil') return []
+  return ['artista']
+}
 export const PUNTOS_ACIERTO = 100
 /** Margen del modo año según dificultad: fácil ±10, normal ±5, difícil ±2. */
 export function margenPara(dificultad: Dificultad): number {
@@ -19,7 +32,11 @@ function normalizeConfig(input?: Partial<HipsterConfig>): HipsterConfig {
   const modo: ModoJuego = input?.modo === 'anio' ? 'anio' : 'titulo'
   const dificultad: Dificultad =
     input?.dificultad === 'facil' || input?.dificultad === 'dificil' ? input.dificultad : 'normal'
-  return { segundos, listaId, numRondas, modo, dificultad }
+  const validas: Pista[] = ['titulo', 'artista', 'anio', 'album']
+  const pistas = Array.isArray(input?.pistas)
+    ? (input.pistas as unknown[]).filter((p): p is Pista => validas.includes(p as Pista))
+    : [...DEFAULT_CONFIG.pistas]
+  return { segundos, listaId, numRondas, modo, dificultad, pistas }
 }
 
 function tracksValidos(tracks: unknown): tracks is HipsterTrack[] {

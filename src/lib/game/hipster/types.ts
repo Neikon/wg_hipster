@@ -11,6 +11,8 @@ export interface HipsterTrack {
 
 export type ModoJuego = 'titulo' | 'anio'
 export type Dificultad = 'facil' | 'normal' | 'dificil'
+/** Info extra que se muestra al jugador para ayudarle a responder. */
+export type Pista = 'titulo' | 'artista' | 'anio' | 'album'
 
 export interface HipsterConfig {
   segundos: number
@@ -18,6 +20,7 @@ export interface HipsterConfig {
   numRondas: number
   modo: ModoJuego
   dificultad: Dificultad
+  pistas: Pista[]
 }
 
 export interface HipsterState {

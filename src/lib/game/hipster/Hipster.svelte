@@ -1,10 +1,10 @@
 <script lang="ts">
   import { gameStore } from '../../stores/gameStore'
   import { roomStore } from '../../stores/roomStore'
-  import { DEFAULT_CONFIG, margenPara } from './engine'
+  import { DEFAULT_CONFIG, margenPara, pistasPara } from './engine'
   import { LISTAS, buscarEnItunes, prepararPartida, prepararPartidaBusqueda } from './listas'
   import type { ResultadoBusqueda, TipoBusqueda } from './listas'
-  import type { HipsterState, HipsterTrack, Dificultad, ModoJuego } from './types'
+  import type { HipsterState, HipsterTrack, Dificultad, ModoJuego, Pista } from './types'
   import { pistaTitulo } from './tracks'
 
   export let onAction: (a:any)=>void = ()=>{}
@@ -18,6 +18,7 @@
   let numRondas = DEFAULT_CONFIG.numRondas
   let modo: ModoJuego = DEFAULT_CONFIG.modo
   let dificultad: Dificultad = DEFAULT_CONFIG.dificultad
+  let pistas: Pista[] = [...DEFAULT_CONFIG.pistas]
   let anioEscrito: number | null = null
   let cargando = false
   let cargaError = ''
@@ -39,6 +40,7 @@
     numRondas = state.config.numRondas
     modo = state.config.modo
     dificultad = state.config.dificultad
+    pistas = [...state.config.pistas]
   }
   $: claveSel = seleccion ? `${seleccion.tipo}:${seleccion.id}` : ''
   // Si el host cambia de lista, modo, rondas o selección, hay que volver a cargar.
@@ -110,7 +112,13 @@
   }
   function start(){
     if (!tracks || !pool) return
-    onAction({ t:'startGame', juegoId:'hipster', config: { segundos, listaId, numRondas, modo, dificultad }, tracks, pool })
+    onAction({ t:'startGame', juegoId:'hipster', config: { segundos, listaId, numRondas, modo, dificultad, pistas }, tracks, pool })
+  }
+
+  function cambiarDificultad(d: Dificultad){
+    dificultad = d
+    // la dificultad propone un preset de pistas; luego se ajusta a mano
+    pistas = pistasPara(d)
   }
   function next(){ onAction({ t:'next' }) }
   function restart(){ onAction({ t:'restart' }) }
@@ -195,12 +203,33 @@
         </label>
         <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
           Dificultad
-          <select bind:value={dificultad} aria-label="Dificultad">
-            <option value="facil">Fácil{modo === 'titulo' ? ' (artista + pista)' : ' (±10 años)'}</option>
-            <option value="normal">Normal{modo === 'titulo' ? ' (solo artista)' : ' (±5 años)'}</option>
-            <option value="dificil">Difícil{modo === 'titulo' ? ' (sin pistas)' : ' (±2 años)'}</option>
+          <select bind:value={dificultad} on:change={()=>cambiarDificultad(dificultad)} aria-label="Dificultad">
+            <option value="facil">Fácil{modo === 'titulo' ? ' (todo)' : ' (±10 años)'}</option>
+            <option value="normal">Normal{modo === 'titulo' ? ' (artista)' : ' (±5 años)'}</option>
+            <option value="dificil">Difícil{modo === 'titulo' ? ' (nada)' : ' (±2 años)'}</option>
           </select>
         </label>
+        <fieldset style="border:0;margin:0;padding:0;display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
+          <legend style="padding:0">Pistas (se puede elegir varias)</legend>
+          <span style="display:flex;gap:0.6rem;flex-wrap:wrap">
+            {#each [['titulo', 'Título'], ['artista', 'Artista'], ['anio', 'Año'], ['album', 'Álbum']] as [v, etiqueta]}
+              {@const val = v as Pista}
+              <label style="display:flex;gap:0.3rem;align-items:center;color:var(--fg);font-size:0.85rem">
+                <input
+                  type="checkbox"
+                  checked={pistas.includes(val)}
+                  disabled={val === 'anio' && modo === 'anio'}
+                  title={val === 'anio' && modo === 'anio' ? 'En modo año no se puede mostrar el año' : etiqueta}
+                  on:change={(e)=>{
+                    const on = (e.target as HTMLInputElement).checked
+                    pistas = on ? [...pistas, val] : pistas.filter((p)=>p!==val)
+                  }}
+                />
+                {etiqueta}
+              </label>
+            {/each}
+          </span>
+        </fieldset>
         <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
           Rondas
           <select bind:value={numRondas} aria-label="Número de rondas">
@@ -253,13 +282,14 @@
       {/if}
     {:else}
       {@const trackActual = state.tracks[state.ronda]}
-      {#if state.config.dificultad !== 'dificil' && trackActual}
-        <p class="muted" style="margin-top:1rem">
-          🎤 Artista: <strong>{trackActual.artista}</strong>
-          {#if state.config.dificultad === 'facil'}
-            <br />🔤 Pista: <strong>{pistaTitulo(trackActual.titulo)}</strong>
-          {/if}
-        </p>
+      {@const pistasCfg = state.config.pistas}
+      {#if trackActual && pistasCfg.length}
+        <ul class="muted" style="margin:1rem 0 0;padding-left:1.2rem;display:grid;gap:0.2rem">
+          {#if pistasCfg.includes('artista')}<li>🎤 Artista: <strong>{trackActual.artista}</strong></li>{/if}
+          {#if pistasCfg.includes('titulo')}<li>🔤 Título: <strong>{state.config.modo === 'titulo' ? pistaTitulo(trackActual.titulo) : trackActual.titulo}</strong></li>{/if}
+          {#if pistasCfg.includes('anio') && trackActual.anio !== null}<li>📅 Año: <strong>{trackActual.anio}</strong></li>{/if}
+          {#if pistasCfg.includes('album')}<li>💿 Álbum: <strong>{trackActual.album}</strong></li>{/if}
+        </ul>
       {/if}
       <div style="display:grid;gap:0.6rem;margin-top:1rem">
         {#each state.opciones as op, idx}
