@@ -1,0 +1,44 @@
+:root {
+  --bg: #0f0e17;
+  --fg: #fffffe;
+  --accent: #ff8906;
+  --accent-hover: #e67e00;
+  --card: #232946;
+  --muted: #a7a9be;
+  --success: #2cb67d;
+  --error: #e45858;
+}
+* { box-sizing: border-box }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Svelte, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+}
+button {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:hover { background: var(--accent-hover) }
+button:disabled { opacity: 0.5; cursor: not-allowed }
+input, select {
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--muted);
+  padding: 0.5rem 0.8rem;
+  border-radius: 6px;
+}
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+.container { max-width: 720px; margin: 0 auto; padding: 2rem 1rem }
+h1,h2 { margin: 0 0 0.5rem }
+.muted { color: var(--muted) }

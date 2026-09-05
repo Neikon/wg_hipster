@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Redirect</title>
+  <script>
+    sessionStorage.redirect = location.href;
+    // GH Pages SPA fallback: redirect to base + hash
+    var base = "/wg_template/";
+    var path = location.pathname.replace(base, "");
+    if (path && path !== "/" && path !== "404.html") {
+      location.replace(base + "#" + path + location.search + location.hash);
+    } else {
+      location.replace(base);
+    }
+  </script>
+  </head><body></body>
+</html>
