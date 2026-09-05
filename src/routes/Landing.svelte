@@ -17,7 +17,7 @@
 </script>
 <div class="container">
   <div class="card" style="text-align:center">
-    <h1>🎉 Fiesta P2P</h1>
+    <h1>🎉 wg_hipster</h1>
     <p class="muted">Crea una sala, comparte el enlace y juega sin servidor</p>
     <div style="margin:1.5rem 0;display:grid;gap:0.8rem;max-width:360px;margin-left:auto;margin-right:auto">
       <input value={name} on:input={onInput} placeholder="Tu nombre" maxlength="20" />
@@ -27,6 +27,6 @@
     <p class="muted" style="font-size:0.85rem">1–20 jugadores · Trivia por turnos · Sin registro</p>
   </div>
   <div style="margin-top:1rem" class="muted">
-    <small>Plantilla Svelte + Trystero (P2P). El enlace contiene el id de la sala.</small>
+    <small>wg_hipster · Svelte + Trystero (P2P). El enlace contiene el id de la sala.</small>
   </div>
 </div>

@@ -1,6 +1,6 @@
 # Crear un juego nuevo
 
-Un juego de `wg_template` es un estado serializable, un reducer puro y un componente
+Un juego de `wg_hipster` es un estado serializable, un reducer puro y un componente
 Svelte. La sala, el lobby y la red P2P no necesitan conocer sus reglas.
 
 El ejemplo de referencia es [`src/lib/game/trivia/`](../src/lib/game/trivia/):
@@ -129,10 +129,10 @@ npm run test:e2e
 Para abrirlo directamente como anfitrión durante el desarrollo:
 
 ```text
-http://localhost:5173/wg_template/#/sala/prueba?host=1&name=Ana
+http://localhost:5173/wg_hipster/#/sala/prueba?host=1&name=Ana
 ```
 
-La plantilla trae un solo juego registrado: al abrir la sala verás el tuyo.
+El repo trae un solo juego registrado: al abrir la sala verás el tuyo.
 Los ids de sala reales tienen seis caracteres; `prueba` es válido para este ejemplo.
 Comprueba también dos pestañas con el enlace que muestra el lobby. La prueba automatizada
 P2P real se exige con `E2E_P2P=1 npm run test:e2e`; necesita salida a los trackers

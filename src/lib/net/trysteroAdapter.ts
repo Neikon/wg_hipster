@@ -9,7 +9,7 @@ export interface TrysteroRoom {
 }
 
 export function joinTrystero(salaId: string): TrysteroRoom {
-  const config = { appId: 'wg_template_v1_' + salaId } as any
+  const config = { appId: 'wg_hipster_v1_' + salaId } as any
   // Trystero torrent strategy usa salaId como roomId
   const room: any = (trysteroJoin as any)(config, salaId)
   const [send, get] = room.makeAction('msg')

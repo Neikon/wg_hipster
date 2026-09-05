@@ -14,7 +14,7 @@
   let salaId = ''
   let isHostParam = false
   let initialName = ''
-  // Plantilla de un solo juego: juegoId es siempre el registrado por defecto.
+  // Un solo juego por defecto; ?juego= permite probar otro módulo registrado.
   // El campo juegoId se mantiene en el protocolo para robustez entre versiones.
   let juegoId = DEFAULT_GAME_ID
   let trystero: any = null
@@ -39,6 +39,8 @@
     const q = new URLSearchParams(hash.split('?')[1] || '')
     isHostParam = q.get('host') === '1'
     initialName = q.get('name') ? decodeURIComponent(q.get('name')!) : ''
+    const j = q.get('juego')
+    if (j && getGameModule(j)) juegoId = j
   }
 
   function showToast(msg:string){

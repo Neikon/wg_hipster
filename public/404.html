@@ -4,7 +4,7 @@
   <script>
     sessionStorage.redirect = location.href;
     // GH Pages SPA fallback: redirect to base + hash
-    var base = "/wg_template/";
+    var base = "/wg_hipster/";
     var path = location.pathname.replace(base, "");
     if (path && path !== "/" && path !== "404.html") {
       location.replace(base + "#" + path + location.search + location.hash);
