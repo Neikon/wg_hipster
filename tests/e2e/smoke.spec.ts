@@ -11,6 +11,11 @@ test('landing renderiza y crear sala lleva al lobby', async ({ page }) => {
   await expect(page).toHaveURL(/#\/sala\/[A-Za-z0-9]{6}/)
   await expect(page.getByRole('heading', { name: /Sala/ })).toBeVisible()
 
+  // el enlace compartido apunta a este juego (no al template) y salir vuelve a la landing
+  const link = await page.locator('input[readonly]').first().inputValue()
+  expect(link).toContain('/wg_hipster/#/sala/')
+  expect(link).not.toContain('wg_template')
+
   expect(errors).toEqual([])
 })
 

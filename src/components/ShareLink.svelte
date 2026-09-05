@@ -1,10 +1,15 @@
 <script lang="ts">
   import qrcode from 'qrcode-generator'
+  import { DEFAULT_GAME_ID } from '../lib/game/registry'
   export let salaId: string
+  export let juegoId: string = DEFAULT_GAME_ID
   let copied=false
   let showQR=false
+  // Derivar de la ruta real servida (no de BASE_URL en build) para que el
+  // enlace y el QR funcionen en dev, preview y Pages sin apuntar a otro sitio.
+  $: suffix = juegoId && juegoId !== DEFAULT_GAME_ID ? `?juego=${juegoId}` : ''
   $: link = typeof location !== 'undefined'
-    ? `${location.origin}${import.meta.env.BASE_URL}#/sala/${salaId}`
+    ? `${location.origin}${location.pathname}#/sala/${salaId}${suffix}`
     : ''
   $: qrUrl = (()=>{ try {
     const qr = qrcode(0, 'M')

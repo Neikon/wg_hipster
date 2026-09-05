@@ -304,7 +304,7 @@
       <button on:click={salir} style="background:var(--muted)">Salir</button>
     </div>
 
-    <ShareLink {salaId} />
+    <ShareLink {salaId} {juegoId} />
 
     <div style="display:grid;gap:1rem;margin-top:1rem">
       <div>
