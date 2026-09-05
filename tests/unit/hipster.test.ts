@@ -50,11 +50,39 @@ describe('hipster engine', () => {
     expect(n.version).toBe(1)
   })
 
+  it('baraja las opciones: la correcta varía y es determinista', () => {
+    const a = empezar(createInitialState([{ id: 'host1' }]))
+    const b = empezar(createInitialState([{ id: 'host1' }]))
+    // mismo estado inicial → mismo orden (reducer puro)
+    expect(a.opciones).toEqual(b.opciones)
+    expect(a.respuestaCorrecta).toBe(b.respuestaCorrecta)
+    // la correcta no está siempre en A: varía entre rondas
+    const posiciones = new Set<number>()
+    let cur = a
+    posiciones.add(cur.respuestaCorrecta)
+    for (let i = 0; i < 4; i++) {
+      cur = reducer(cur, { t: 'answer', opcion: cur.respuestaCorrecta }, { isHost: false, peerId: 'host1' })
+      cur = reducer(cur, { t: 'next' }, host)
+      if (cur.phase === 'pregunta') posiciones.add(cur.respuestaCorrecta)
+    }
+    expect(posiciones.size).toBeGreaterThan(1)
+    // la opción correcta contiene el título del track de la ronda
+    expect(a.opciones[a.respuestaCorrecta]).toContain(TRACKS[0].titulo)
+  })
+
   it('answer válida suma 100 y pasa a resultados cuando todos responden', () => {
     const s = empezar(createInitialState([{ id: 'host1' }]))
-    const n = reducer(s, { t: 'answer', opcion: 0 }, { isHost: false, peerId: 'host1' })
+    const n = reducer(s, { t: 'answer', opcion: s.respuestaCorrecta }, { isHost: false, peerId: 'host1' })
     expect(n.phase).toBe('resultados')
     expect(n.puntos['host1']).toBe(100)
+  })
+
+  it('fallar no suma puntos', () => {
+    const s = empezar(createInitialState([{ id: 'host1' }]))
+    const erronea = ([0, 1, 2, 3] as const).find((i) => i !== s.respuestaCorrecta)!
+    const n = reducer(s, { t: 'answer', opcion: erronea }, { isHost: false, peerId: 'host1' })
+    expect(n.phase).toBe('resultados')
+    expect(n.puntos['host1']).toBe(0)
   })
 
   it('ignora duplicados y opciones inválidas', () => {
@@ -84,7 +112,7 @@ describe('hipster engine', () => {
       cur = reducer(cur, { t: 'next' }, host)
       expect(cur.phase).toBe('pregunta')
       expect(cur.ronda).toBe(i + 1)
-      cur = reducer(cur, { t: 'answer', opcion: 0 }, { isHost: false, peerId: 'host1' })
+      cur = reducer(cur, { t: 'answer', opcion: cur.respuestaCorrecta }, { isHost: false, peerId: 'host1' })
       expect(cur.phase).toBe('resultados')
     }
     cur = reducer(cur, { t: 'next' }, host)

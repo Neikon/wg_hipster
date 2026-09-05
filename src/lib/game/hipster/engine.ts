@@ -28,17 +28,34 @@ function tracksValidos(tracks: unknown): tracks is HipsterTrack[] {
   )
 }
 
+/** PRNG determinista: el reducer debe ser puro (sin Math.random) pero
+ *  la posición de la correcta tiene que variar por ronda. */
+function rng(seed: number): () => number {
+  let s = (seed >>> 0) || 1
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0
+    return s / 2 ** 32
+  }
+}
+
 function buildRonda(
   tracks: HipsterTrack[],
   idx: number
 ): Pick<HipsterState, 'clipUrl' | 'opciones' | 'respuestaCorrecta'> {
   const track = tracks[idx % tracks.length]
-  // Correcta fija en posición 0; distractores = otros títulos de la partida.
+  const correcta = label(track)
   const distractores = tracks
     .filter((_, i) => i % tracks.length !== idx % tracks.length)
     .slice(0, 3)
     .map(label)
-  return { clipUrl: track.previewUrl, opciones: [label(track), ...distractores], respuestaCorrecta: 0 }
+  // Barajar con semilla de la ronda: determinista (mismo estado → mismo orden).
+  const rand = rng(track.trackId * 31 + idx * 101 + tracks.length)
+  const opciones = [correcta, ...distractores]
+  for (let i = opciones.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[opciones[i], opciones[j]] = [opciones[j], opciones[i]]
+  }
+  return { clipUrl: track.previewUrl, opciones, respuestaCorrecta: opciones.indexOf(correcta) }
 }
 
 export function createInitialState(peers: { id: string }[], config: Partial<HipsterConfig> = {}): HipsterState {
