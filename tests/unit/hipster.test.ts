@@ -167,10 +167,12 @@ describe('listas', () => {
     await expect(prepararPartida('top-pop', 5)).rejects.toThrow(/insuficiente/i)
   })
 
-  it('buscarEnItunes devuelve álbumes y artistas', async () => {
+  it('buscarEnItunes respeta el filtro por tipo e incluye canciones', async () => {
+    const llamadas: string[] = []
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
+        llamadas.push(url)
         if (url.includes('entity=album'))
           return {
             ok: true,
@@ -178,17 +180,29 @@ describe('listas', () => {
               results: [{ collectionId: 11, collectionName: 'Álbum 80s', artistName: 'Varios', artworkUrl100: 'https://img/100x100bb.jpg' }]
             })
           }
-        return {
-          ok: true,
-          json: async () => ({ results: [{ artistId: 22, artistName: 'Queen', primaryGenreName: 'Rock' }] })
-        }
+        if (url.includes('entity=song'))
+          return {
+            ok: true,
+            json: async () => ({
+              results: [{ trackId: 31, trackName: 'Tema S', artistName: 'Art S', collectionName: 'C', previewUrl: 'https://clip.m4a', artworkUrl100: 'https://img/100x100bb.jpg' }]
+            })
+          }
+        return { ok: true, json: async () => ({ results: [{ artistId: 22, artistName: 'Queen', primaryGenreName: 'Rock' }] }) }
       })
     )
     const r = await buscarEnItunes('80s')
-    expect(r).toHaveLength(2)
+    expect(r).toHaveLength(3)
     expect(r[0]).toMatchObject({ tipo: 'album', id: 11, nombre: 'Álbum 80s' })
     expect(r[1]).toMatchObject({ tipo: 'artista', id: 22, nombre: 'Queen' })
+    expect(r[2]).toMatchObject({ tipo: 'cancion', id: 31, nombre: 'Tema S' })
+    expect(r[2].track?.previewUrl).toBe('https://clip.m4a')
     expect(await buscarEnItunes('x')).toEqual([])
+
+    llamadas.length = 0
+    const soloCanciones = await buscarEnItunes('80s', ['cancion'])
+    expect(soloCanciones).toHaveLength(1)
+    expect(llamadas).toHaveLength(1)
+    expect(llamadas[0]).toContain('entity=song')
   })
 
   it('prepararPartidaBusqueda arma rondas desde un álbum', async () => {

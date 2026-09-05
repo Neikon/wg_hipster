@@ -27,7 +27,7 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `vite.config.ts` — `base=VITE_BASE || '/wg_hipster/'`, `server/preview` con `host:true, strictPort:true` (devcontainer)
 - `.devcontainer/devcontainer.json` + `post-create.sh` — imagen `typescript-node:22`, puertos 5173/4173
 - `.github/workflows/pages.yml` — build (`VITE_BASE=/wg_hipster/`) + `deploy-pages@v4`
-- `tests/unit/` — 23 tests (hipster 12); `tests/e2e/` — 6 casos, incluido P2P real con dos contextos
+- `tests/unit/` — 23 tests (hipster 12); `tests/e2e/` — 7 casos, incluido P2P real con dos contextos
 
 ## Comandos (Node 22)
 
