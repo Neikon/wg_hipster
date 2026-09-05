@@ -4,7 +4,7 @@ Juego de fiesta multijugador en navegador. **Sin servidor ni base de datos**, 10
 
 - **Stack:** Svelte + Vite + TypeScript + Trystero (WebRTC P2P via trackers públicos)
 - **Flujo:** Crear sala → compartir enlace `#/sala/<id>` → lobby → juego
-- **Juego actual:** trivia configurable (se sustituirá por wg_hipster)
+- **Juego:** hipster musical (adivina la canción con clips de iTunes)
 - **Host migration:** Si el anfitrión se va, el siguiente jugador toma el control sin perder estado
 
 ## Uso rápido
@@ -44,7 +44,7 @@ La prueba P2P se salta si no logra alcanzar los trackers, salvo cuando `E2E_P2P=
 ```
 src/lib/net/      # P2P (Trystero adapter, helpers)
 src/lib/stores/   # roomStore, gameStore
-src/lib/game/     # contrato + registry + trivia (juego actual)
+src/lib/game/     # contrato + registry + hipster
 src/routes/       # Landing, Room, Game
 src/components/   # PlayerList, ShareLink, NameInput
 ```

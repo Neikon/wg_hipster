@@ -28,11 +28,11 @@ test('sincroniza host e invitado a través de la red P2P', async ({ browser }, t
       throw error
     }
 
-    await host.getByRole('button', { name: /Empezar trivia/ }).click()
-    await expect(host.getByText('Pregunta 1/10')).toBeVisible()
-    await expect(guest.getByText('Pregunta 1/10')).toBeVisible({ timeout: 10_000 })
+    await host.getByRole('button', { name: /Empezar hipster/ }).click()
+    await expect(host.getByText(/¿Qué canción es\?/)).toBeVisible()
+    await expect(guest.getByText(/¿Qué canción es\?/)).toBeVisible({ timeout: 10_000 })
 
-    await guest.getByRole('button', { name: /B\. Madrid/ }).click()
+    await guest.getByRole('button', { name: /^A\. / }).click()
     await expect(host.getByText('1/2 han respondido')).toBeVisible({ timeout: 10_000 })
   } finally {
     await hostContext.close()

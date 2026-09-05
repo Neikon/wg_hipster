@@ -33,10 +33,11 @@ test('al empezar el juego se ocultan los elementos del lobby', async ({ page }) 
   await expect(page.getByAltText(/QR para unirse/)).toBeVisible()
 
   // el anfitrión empieza la partida
-  await page.getByRole('button', { name: /Empezar trivia/ }).click()
+  await page.getByRole('button', { name: /Empezar hipster/ }).click()
 
-  // juego: pregunta visible a pantalla completa, sin elementos de lobby
-  await expect(page.getByText(/Pregunta 1\/10/)).toBeVisible()
+  // juego: clip visible a pantalla completa, sin elementos de lobby
+  await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+  await expect(page.locator('audio')).toBeVisible()
   await expect(page.getByRole('button', { name: /Copiar enlace/ })).toBeHidden()
   await expect(page.getByRole('heading', { name: /Jugadores/ })).toBeHidden()
   await expect(page.getByRole('heading', { name: /Cambiar nombre/ })).toBeHidden()
@@ -62,20 +63,18 @@ test('crear una segunda sala muestra datos limpios de la nueva', async ({ page }
   await expect(page.getByText('1/20 jugadores')).toBeVisible()
 })
 
-test('configura y termina una trivia de dos preguntas', async ({ page }) => {
+test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
   await page.goto('#/sala/corta1?host=1&name=Ana')
 
-  await page.getByLabel('Número de preguntas').fill('2')
-  await page.getByLabel('Segundos por pregunta').fill('5')
-  await page.getByRole('button', { name: /Empezar trivia \(2 preguntas\)/ }).click()
-
-  await expect(page.getByText('Pregunta 1/2')).toBeVisible()
-  await page.getByRole('button', { name: /B\. Madrid/ }).click()
-  await expect(page.getByRole('heading', { name: 'Resultados' })).toBeVisible()
-  await page.getByRole('button', { name: 'Siguiente' }).click()
-
-  await expect(page.getByText('Pregunta 2/2')).toBeVisible()
-  await page.getByRole('button', { name: /B\. 6/ }).click()
+  await page.getByRole('button', { name: /Empezar hipster/ }).click()
+  for (let i = 0; i < 5; i++) {
+    await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+    await page.getByRole('button', { name: /^A\. / }).click()
+    await expect(page.getByRole('heading', { name: 'Resultados' })).toBeVisible()
+    if (i < 4) await page.getByRole('button', { name: 'Siguiente' }).click()
+  }
   await page.getByRole('button', { name: 'Siguiente' }).click()
   await expect(page.getByRole('heading', { name: /Clasificación final/ })).toBeVisible()
+  await page.getByRole('button', { name: /Volver al lobby/ }).click()
+  await expect(page.getByRole('button', { name: /Empezar hipster/ })).toBeVisible()
 })

@@ -5,7 +5,7 @@
 ## Qué es
 
 **Este repo ES el juego wg_hipster**, no una plantilla. Juego de fiesta multijugador en navegador, 100 % estático (GitHub Pages), sin backend ni base de datos.
-Flujo: crear sala → compartir enlace `#/sala/<id>` → lobby (1–20 jugadores) → juego por turnos (actualmente trivia, se sustituirá por wg_hipster).
+Flujo: crear sala → compartir enlace `#/sala/<id>` → lobby (1–20 jugadores) → hipster musical por turnos.
 Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hipster_v1_'+salaId`). Host-autoritativo lógico con migración de host. UI en español.
 
 ## Dónde está la arquitectura
@@ -22,19 +22,19 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `src/lib/net/{types,trysteroAdapter,room}.ts` — `Msg`, adapter Trystero (`appId='wg_hipster_v1_'+salaId`), `electNewHost`/`isRoomFull`
 - `src/lib/stores/{roomStore,gameStore}.ts` — `roomStore` (sala/peers/joinOrder/isHost) + `gameStore` (aplica `stateSync` solo si versión mayor)
 - `src/lib/game/{types,registry}.ts` — contrato `GameModule` y registry dinámico por `juegoId`
-- `src/lib/game/trivia/` — juego actual (se sustituirá por wg_hipster)
+- `src/lib/game/hipster/` — juego wg_hipster (clips iTunes, 5 rondas)
 - `src/lib/utils/{id,names}.ts` — `generateSalaId` (6 chars), `assignName` (`Jugador N`), `sanitizeName`
 - `vite.config.ts` — `base=VITE_BASE || '/wg_hipster/'`, `server/preview` con `host:true, strictPort:true` (devcontainer)
 - `.devcontainer/devcontainer.json` + `post-create.sh` — imagen `typescript-node:22`, puertos 5173/4173
 - `.github/workflows/pages.yml` — build (`VITE_BASE=/wg_hipster/`) + `deploy-pages@v4`
-- `tests/unit/` — 21 tests; `tests/e2e/` — 5 casos, incluido P2P real con dos contextos
+- `tests/unit/` — 16 tests (hipster 5); `tests/e2e/` — 5 casos, incluido P2P real con dos contextos
 
 ## Comandos (Node 22)
 
 ```bash
 npm ci            # instalar (postCreate del devcontainer ya lo hace)
 npm run dev       # http://localhost:5173
-npm run test      # vitest run (21 tests)
+npm run test      # vitest run (16 tests)
 npm run check     # svelte-check + tsc
 npm run build     # dist/ para Pages
 npm run test:e2e  # Playwright; E2E_P2P=1 hace obligatorio el caso de trackers
