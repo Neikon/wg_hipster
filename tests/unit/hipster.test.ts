@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createInitialState, reducer } from '../../src/lib/game/hipster/engine'
 import { TRACKS } from '../../src/lib/game/hipster/tracks'
-import { LISTAS, buscarEnItunes, mapTrackDeezer, prepararPartida, prepararPartidaBusqueda } from '../../src/lib/game/hipster/listas'
+import { LISTAS, LISTA_FALLBACK, buscarEnItunes, getLista, mapTrackDeezer, prepararPartida, prepararPartidaBusqueda } from '../../src/lib/game/hipster/listas'
 import type { HipsterTrack } from '../../src/lib/game/hipster/types'
 
 const host = { isHost: true, peerId: 'host1' }
@@ -95,16 +95,16 @@ describe('hipster engine', () => {
 describe('listas', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('catálogo fijo con las 6 listas + clásicos', () => {
+  it('catálogo fijo con las 6 listas (clásicos solo como fallback)', () => {
     expect(LISTAS.map((l) => l.id)).toEqual([
       'top-global',
       'top-espana',
       'top-japon',
       'top-rock',
       'top-pop',
-      'top-reggaeton',
-      'fiesta-clasicos'
+      'top-reggaeton'
     ])
+    expect(getLista(LISTA_FALLBACK)?.fuente).toBe('fixture')
   })
 
   it('prepararPartida enriquece el chart por lookup y descarta sin audio', async () => {

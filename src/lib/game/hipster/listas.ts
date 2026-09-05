@@ -22,11 +22,17 @@ export const LISTAS: readonly ListaRef[] = [
   { id: 'top-japon', nombre: 'Top Japón', fuente: 'itunes-rss', cc: 'jp', genre: '' },
   { id: 'top-rock', nombre: 'Top Rock', fuente: 'itunes-rss', cc: 'us', genre: '21' },
   { id: 'top-pop', nombre: 'Top Pop', fuente: 'itunes-rss', cc: 'us', genre: '14' },
-  { id: 'top-reggaeton', nombre: 'Top Reggaeton', fuente: 'itunes-rss', cc: 'us', genre: '12' },
-  { id: 'fiesta-clasicos', nombre: 'Clásicos (sin conexión)', fuente: 'fixture', cc: '', genre: '' }
+  { id: 'top-reggaeton', nombre: 'Top Reggaeton', fuente: 'itunes-rss', cc: 'us', genre: '12' }
 ]
 
+// Reserva sin conexión: no sale en el desplegable, pero sigue siendo el
+// fallback (DEFAULT_CONFIG) y lo usan los tests sin red.
+export const LISTA_FALLBACK = 'fiesta-clasicos'
+
 export function getLista(id: string): ListaRef | null {
+  if (id === LISTA_FALLBACK) {
+    return { id: LISTA_FALLBACK, nombre: 'Clásicos', fuente: 'fixture', cc: '', genre: '' }
+  }
   return LISTAS.find((l) => l.id === id) ?? null
 }
 
