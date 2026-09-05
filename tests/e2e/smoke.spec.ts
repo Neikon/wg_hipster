@@ -156,3 +156,18 @@ test('el host busca una playlist de Deezer y juega', async ({ page }) => {
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
 })
+
+test('modo año: se escribe el año y vale ±5', async ({ page }) => {
+  await page.goto('#/sala/anio01?host=1&name=Ana')
+  await page.getByLabel('Modo de juego').selectOption('anio')
+  await page.getByRole('button', { name: /Cargar lista/ }).click()
+  await expect(page.getByText(/Lista ✓ 5 rondas/)).toBeVisible()
+  await page.getByRole('button', { name: /Empezar hipster/ }).click()
+  await expect(page.getByText(/¿De qué año es\?/)).toBeVisible()
+  // el año correcto de la ronda es aleatorio (fixture barajado): se responde
+  // uno cualquiera y se verifica flujo + veredicto con margen
+  await page.getByLabel('Año de la canción').fill('2000')
+  await page.getByRole('button', { name: 'Responder' }).click()
+  await expect(page.getByRole('heading', { name: 'Resultados' })).toBeVisible()
+  await expect(page.getByText(/Año correcto:/)).toBeVisible()
+})

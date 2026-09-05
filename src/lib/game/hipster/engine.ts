@@ -1,8 +1,10 @@
-import type { HipsterAction, HipsterConfig, HipsterState, HipsterTrack } from './types'
+import type { HipsterAction, HipsterConfig, HipsterState, HipsterTrack, ModoJuego } from './types'
 import { label } from './tracks'
 
-export const DEFAULT_CONFIG: HipsterConfig = { segundos: 60, listaId: 'fiesta-clasicos', numRondas: 5 }
+export const DEFAULT_CONFIG: HipsterConfig = { segundos: 60, listaId: 'fiesta-clasicos', numRondas: 5, modo: 'titulo' }
 export const PUNTOS_ACIERTO = 100
+/** Margen del modo año: se da por bueno ±5 años. */
+export const MARGEN_ANIO = 5
 
 function normalizeConfig(input?: Partial<HipsterConfig>): HipsterConfig {
   const rawSeg = Math.trunc(input?.segundos ?? DEFAULT_CONFIG.segundos)
@@ -10,7 +12,8 @@ function normalizeConfig(input?: Partial<HipsterConfig>): HipsterConfig {
   const rawRon = Math.trunc(input?.numRondas ?? DEFAULT_CONFIG.numRondas)
   const numRondas = Number.isFinite(rawRon) ? Math.max(4, Math.min(30, rawRon)) : DEFAULT_CONFIG.numRondas
   const listaId = typeof input?.listaId === 'string' && input.listaId ? input.listaId : DEFAULT_CONFIG.listaId
-  return { segundos, listaId, numRondas }
+  const modo: ModoJuego = input?.modo === 'anio' ? 'anio' : 'titulo'
+  return { segundos, listaId, numRondas, modo }
 }
 
 function tracksValidos(tracks: unknown): tracks is HipsterTrack[] {
@@ -41,13 +44,18 @@ function rng(seed: number): () => number {
 /**
  * Distractores desde la lista original completa (pool), no del corte de N
  * rondas: excluye el track actual, baraja con semilla de ronda y coge 3.
+ * En modo año no hay opciones: la respuesta correcta es el año.
  */
 function buildRonda(
   tracks: HipsterTrack[],
   pool: HipsterTrack[],
-  idx: number
+  idx: number,
+  modo: ModoJuego
 ): Pick<HipsterState, 'clipUrl' | 'opciones' | 'respuestaCorrecta'> {
   const track = tracks[idx % tracks.length]
+  if (modo === 'anio') {
+    return { clipUrl: track.previewUrl, opciones: [], respuestaCorrecta: track.anio ?? 0 }
+  }
   const correcta = label(track)
   const fuente = pool.length >= 4 ? pool : tracks
   const rand = rng(track.trackId * 31 + idx * 101 + fuente.length)
@@ -90,10 +98,17 @@ export function createInitialState(peers: { id: string }[], config: Partial<Hips
   }
 }
 
+function esAcierto(modo: ModoJuego, respuesta: number, correcta: number): boolean {
+  if (modo === 'anio') return Math.abs(respuesta - correcta) <= MARGEN_ANIO
+  return respuesta === correcta
+}
+
 function toResultados(state: HipsterState): HipsterState {
   const puntos = { ...state.puntos }
   for (const [pid, ans] of Object.entries(state.respuestas)) {
-    if (ans === state.respuestaCorrecta) puntos[pid] = (puntos[pid] ?? 0) + PUNTOS_ACIERTO
+    if (esAcierto(state.config.modo, ans, state.respuestaCorrecta)) {
+      puntos[pid] = (puntos[pid] ?? 0) + PUNTOS_ACIERTO
+    }
   }
   return { ...state, phase: 'resultados', timer: 5, puntos, version: state.version + 1 }
 }
@@ -108,10 +123,12 @@ export function reducer(
     if (state.phase !== 'lobby' && state.phase !== 'final') return state
     // La partida solo arranca con rondas 100 % completas (inyectadas por el host).
     // El pool (lista original) viaja también: de ahí salen los distractores.
+    // En modo año todos los tracks deben traer año.
     const tracks = tracksValidos(action.tracks) ? action.tracks : null
     if (!tracks) return state
     const pool = tracksValidos(action.pool) ? action.pool : tracks
     const config = normalizeConfig(action.config ?? state.config)
+    if (config.modo === 'anio' && tracks.some((t) => t.anio === null)) return state
     const ronda = 0
     return {
       ...state,
@@ -119,7 +136,7 @@ export function reducer(
       ronda,
       tracks,
       pool,
-      ...buildRonda(tracks, pool, ronda),
+      ...buildRonda(tracks, pool, ronda, config.modo),
       respuestas: {},
       timer: config.segundos,
       config,
@@ -130,7 +147,12 @@ export function reducer(
     if (state.phase !== 'pregunta') return state
     if (state.respuestas[ctx.peerId] !== undefined) return state
     if (state.timer <= 0) return state
-    if (action.opcion < 0 || action.opcion > 3) return state
+    if (state.config.modo === 'anio') {
+      // año escrito a mano: 1900–2100
+      if (!Number.isInteger(action.opcion) || action.opcion < 1900 || action.opcion > 2100) return state
+    } else if (action.opcion < 0 || action.opcion > 3) {
+      return state
+    }
     const respuestas = { ...state.respuestas, [ctx.peerId]: action.opcion }
     const withAnswer = { ...state, respuestas, version: state.version + 1 }
     const todos = Object.keys(withAnswer.puntos)
@@ -155,7 +177,7 @@ export function reducer(
       ...state,
       phase: 'pregunta',
       ronda: nr,
-      ...buildRonda(state.tracks, state.pool, nr),
+      ...buildRonda(state.tracks, state.pool, nr, state.config.modo),
       respuestas: {},
       timer: state.config.segundos,
       version: state.version + 1

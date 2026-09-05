@@ -146,6 +146,46 @@ describe('hipster engine', () => {
     expect(n.puntos['host1']).toBe(0)
   })
 
+  it('modo año: vale ±5, rechaza fuera de rango y exige años en tracks', () => {
+    const conAnio = [...TRACKS]
+    const base = createInitialState([{ id: 'host1' }], { modo: 'anio' })
+    expect(base.config.modo).toBe('anio')
+    const s = reducer(
+      base,
+      { t: 'startGame', juegoId: 'hipster', config: { modo: 'anio' }, tracks: conAnio, pool: conAnio },
+      host
+    )
+    expect(s.phase).toBe('pregunta')
+    expect(s.opciones).toEqual([])
+    const anio = s.respuestaCorrecta as number
+    expect(anio).toBeGreaterThanOrEqual(1900)
+
+    // dentro del margen suma, en el borde también, fuera no
+    const ok = reducer(s, { t: 'answer', opcion: anio + 5 }, { isHost: false, peerId: 'host1' })
+    expect(ok.phase).toBe('resultados')
+    expect(ok.puntos['host1']).toBe(100)
+
+    let s2 = reducer(
+      createInitialState([{ id: 'a' }, { id: 'b' }]),
+      { t: 'startGame', juegoId: 'hipster', config: { modo: 'anio' }, tracks: conAnio, pool: conAnio },
+      host
+    )
+    s2 = reducer(s2, { t: 'answer', opcion: (s2.respuestaCorrecta as number) + 6 }, { isHost: false, peerId: 'a' })
+    expect(s2.phase).toBe('pregunta')
+    expect(reducer(s2, { t: 'answer', opcion: 1700 }, { isHost: false, peerId: 'b' })).toBe(s2)
+
+    // modo por defecto sigue siendo título y rechaza años como opción
+    const t = empezar(createInitialState([{ id: 'host1' }]))
+    expect(t.config.modo).toBe('titulo')
+    expect(reducer(t, { t: 'answer', opcion: 1975 }, { isHost: false, peerId: 'host1' })).toBe(t)
+
+    // sin año en algún track no arranca en modo año
+    const sinAnio = conAnio.map((x, i) => (i === 0 ? { ...x, anio: null } : x))
+    expect(
+      reducer(base, { t: 'startGame', juegoId: 'hipster', config: { modo: 'anio' }, tracks: sinAnio, pool: sinAnio }, host)
+    ).toBe(base)
+  })
+
   it('ignora duplicados y opciones inválidas', () => {
     const s = empezar(createInitialState([{ id: 'a' }, { id: 'b' }]))
     const v0 = s.version

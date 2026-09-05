@@ -267,9 +267,14 @@ function guardarCache(listaId: string, items: Crudo[]): void {
 /**
  * El host prepara rondas completas: descarga el chart, enriquece con lookup
  * hasta tener numRondas temas con audio (o agota el chart), baraja y corta.
+ * Con requireAnio (modo año) descarta además los temas sin año.
  * Garantiza tracks 100 % reproducibles o lanza error explicando el paso.
  */
-export async function prepararPartida(listaId: string, numRondas: number): Promise<PartidaLista> {
+export async function prepararPartida(
+  listaId: string,
+  numRondas: number,
+  opts: { requireAnio?: boolean } = {}
+): Promise<PartidaLista> {
   const ref = getLista(listaId)
   if (!ref) throw new Error('Lista desconocida')
   const n = Math.max(4, Math.min(30, Math.trunc(numRondas) || 5))
@@ -312,8 +317,12 @@ export async function prepararPartida(listaId: string, numRondas: number): Promi
   if (completos.length < 4) {
     throw new Error(`Lista insuficiente: solo ${completos.length} temas con audio`)
   }
+  const conAnio = opts.requireAnio ? completos.filter((c) => c.anio !== null) : completos
+  if (opts.requireAnio && conAnio.length < 4) {
+    throw new Error(`Lista insuficiente: solo ${conAnio.length} temas con año`)
+  }
 
-  const pool = [...completos]
+  const pool = [...conAnio]
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[pool[i], pool[j]] = [pool[j], pool[i]]
@@ -427,7 +436,8 @@ export async function buscarEnItunes(
 export async function prepararPartidaBusqueda(
   sel: ResultadoBusqueda,
   numRondas: number,
-  country = 'ES'
+  country = 'ES',
+  opts: { requireAnio?: boolean } = {}
 ): Promise<PartidaLista> {
   const n = Math.max(4, Math.min(30, Math.trunc(numRondas) || 5))
   const cacheKey = `busq:${sel.tipo}:${sel.id}`
@@ -459,10 +469,14 @@ export async function prepararPartidaBusqueda(
     }
   }
   if (!crudos) throw new Error('No se pudo descargar la selección (¿sin conexión?)')
-  const completos = crudos.filter((c) => !!c.previewUrl)
+  const completos = crudos.filter((c) => !!c.previewUrl && (!opts.requireAnio || c.anio !== null))
   const descartados = crudos.length - completos.length
   if (completos.length < 4) {
-    throw new Error(`Selección insuficiente: solo ${completos.length} temas con audio`)
+    throw new Error(
+      opts.requireAnio
+        ? `Selección insuficiente: solo ${completos.length} temas con año`
+        : `Selección insuficiente: solo ${completos.length} temas con audio`
+    )
   }
   const pool = [...completos]
   for (let i = pool.length - 1; i > 0; i--) {

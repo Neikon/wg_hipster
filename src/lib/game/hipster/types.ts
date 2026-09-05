@@ -9,10 +9,13 @@ export interface HipsterTrack {
   anio: number | null
 }
 
+export type ModoJuego = 'titulo' | 'anio'
+
 export interface HipsterConfig {
   segundos: number
   listaId: string
   numRondas: number
+  modo: ModoJuego
 }
 
 export interface HipsterState {

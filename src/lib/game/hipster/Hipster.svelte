@@ -4,7 +4,7 @@
   import { DEFAULT_CONFIG } from './engine'
   import { LISTAS, buscarEnItunes, prepararPartida, prepararPartidaBusqueda } from './listas'
   import type { ResultadoBusqueda, TipoBusqueda } from './listas'
-  import type { HipsterState, HipsterTrack } from './types'
+  import type { HipsterState, HipsterTrack, ModoJuego } from './types'
 
   export let onAction: (a:any)=>void = ()=>{}
 
@@ -15,6 +15,8 @@
   let segundos = DEFAULT_CONFIG.segundos
   let listaId = DEFAULT_CONFIG.listaId
   let numRondas = DEFAULT_CONFIG.numRondas
+  let modo: ModoJuego = DEFAULT_CONFIG.modo
+  let anioEscrito: number | null = null
   let cargando = false
   let cargaError = ''
   let tracks: HipsterTrack[] | null = null
@@ -33,15 +35,22 @@
     segundos = state.config.segundos
     listaId = state.config.listaId
     numRondas = state.config.numRondas
+    modo = state.config.modo
   }
   $: claveSel = seleccion ? `${seleccion.tipo}:${seleccion.id}` : ''
-  // Si el host cambia de lista, rondas o selección, hay que volver a cargar.
-  $: if (tracks && (listaId !== cargadaPara?.listaId || numRondas !== cargadaPara?.numRondas || claveSel !== (cargadaPara?.busq ?? ''))) {
+  // Si el host cambia de lista, modo, rondas o selección, hay que volver a cargar.
+  $: if (tracks && (listaId !== cargadaPara?.listaId || numRondas !== cargadaPara?.numRondas || modo !== cargadaPara?.modo || claveSel !== (cargadaPara?.busq ?? ''))) {
     tracks = null
     pool = null
     descartados = 0
   }
-  let cargadaPara: { listaId: string; numRondas: number; busq: string } | null = null
+  // Al cambiar de ronda se limpia el campo del año.
+  let ultimaRondaVista = -1
+  $: if (state.phase === 'pregunta' && state.ronda !== ultimaRondaVista) {
+    ultimaRondaVista = state.ronda
+    anioEscrito = null
+  }
+  let cargadaPara: { listaId: string; numRondas: number; busq: string; modo: ModoJuego } | null = null
 
   async function cargar(){
     cargando = true
@@ -49,13 +58,14 @@
     tracks = null
     pool = null
     try {
+      const conAnio = modo === 'anio'
       const r = listaId === BUSCAR_ID && seleccion
-        ? await prepararPartidaBusqueda(seleccion, numRondas)
-        : await prepararPartida(listaId, numRondas)
+        ? await prepararPartidaBusqueda(seleccion, numRondas, 'ES', { requireAnio: conAnio })
+        : await prepararPartida(listaId, numRondas, { requireAnio: conAnio })
       tracks = r.tracks
       pool = r.pool
       descartados = r.descartados
-      cargadaPara = { listaId, numRondas, busq: claveSel }
+      cargadaPara = { listaId, numRondas, busq: claveSel, modo }
     } catch (e) {
       cargaError = e instanceof Error ? e.message : 'No se pudo cargar la lista'
     } finally {
@@ -90,9 +100,14 @@
     if (state.respuestas[room.selfId] !== undefined) return
     onAction({ t:'answer', opcion })
   }
+  function answerAnio(){
+    if (state.respuestas[room.selfId] !== undefined) return
+    if (anioEscrito === null || !Number.isInteger(anioEscrito)) return
+    onAction({ t:'answer', opcion: anioEscrito })
+  }
   function start(){
     if (!tracks || !pool) return
-    onAction({ t:'startGame', juegoId:'hipster', config: { segundos, listaId, numRondas }, tracks, pool })
+    onAction({ t:'startGame', juegoId:'hipster', config: { segundos, listaId, numRondas, modo }, tracks, pool })
   }
   function next(){ onAction({ t:'next' }) }
   function restart(){ onAction({ t:'restart' }) }
@@ -169,6 +184,13 @@
           </div>
         {/if}
         <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
+          Modo de juego
+          <select bind:value={modo} aria-label="Modo de juego">
+            <option value="titulo">Adivina la canción</option>
+            <option value="anio">Adivina el año (±5)</option>
+          </select>
+        </label>
+        <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
           Rondas
           <select bind:value={numRondas} aria-label="Número de rondas">
             <option value={5}>5 rondas</option>
@@ -202,27 +224,52 @@
   </div>
 {:else if state.phase === 'pregunta'}
   <div class="card">
-    <div style="display:flex;justify-content:space-between"><strong>Ronda {state.ronda+1}/{state.tracks.length} · ¿Qué canción es?</strong><span>⏱ {state.timer}s</span></div>
+    <div style="display:flex;justify-content:space-between"><strong>Ronda {state.ronda+1}/{state.tracks.length} · {state.config.modo === 'anio' ? '¿De qué año es?' : '¿Qué canción es?'}</strong><span>⏱ {state.timer}s</span></div>
     <audio controls src={state.clipUrl} style="width:100%;margin-top:1rem" aria-label="Clip musical"></audio>
-    <div style="display:grid;gap:0.6rem;margin-top:1rem">
-      {#each state.opciones as op, idx}
-        <button
-          on:click={()=>answer(idx)}
-          disabled={state.respuestas[room.selfId] !== undefined}
-          style="text-align:left;border:1px solid var(--muted)"
-        >{String.fromCharCode(65+idx)}. {op} {state.respuestas[room.selfId]===idx ? '✓' : ''}</button>
-      {/each}
-    </div>
+    {#if state.config.modo === 'anio'}
+      {#if state.respuestas[room.selfId] !== undefined}
+        <p style="margin-top:1rem">Tu respuesta: <strong>{state.respuestas[room.selfId]}</strong> ✓</p>
+      {:else}
+        <div style="display:flex;gap:0.5rem;margin-top:1rem">
+          <input
+            type="number" min="1900" max="2100" placeholder="p. ej. 1985"
+            bind:value={anioEscrito} aria-label="Año de la canción" style="flex:1;min-width:0"
+            on:keydown={(e)=>{ if (e.key === 'Enter') answerAnio() }}
+          />
+          <button on:click={answerAnio}>Responder</button>
+        </div>
+        <p class="muted" style="margin-top:0.5rem">Vale cualquier año a ±5 del correcto.</p>
+      {/if}
+    {:else}
+      <div style="display:grid;gap:0.6rem;margin-top:1rem">
+        {#each state.opciones as op, idx}
+          <button
+            on:click={()=>answer(idx)}
+            disabled={state.respuestas[room.selfId] !== undefined}
+            style="text-align:left;border:1px solid var(--muted)"
+          >{String.fromCharCode(65+idx)}. {op} {state.respuestas[room.selfId]===idx ? '✓' : ''}</button>
+        {/each}
+      </div>
+    {/if}
     <p class="muted" style="margin-top:0.8rem">{Object.keys(state.respuestas).length}/{peers.length} han respondido</p>
   </div>
 {:else if state.phase === 'resultados'}
   <div class="card">
     <h2>Resultados</h2>
-    <p>Correcta: <strong style="color:var(--success)">{state.opciones[state.respuestaCorrecta]}</strong></p>
+    {#if state.config.modo === 'anio'}
+      <p>Año correcto: <strong style="color:var(--success)">{state.respuestaCorrecta}</strong></p>
+    {:else}
+      <p>Correcta: <strong style="color:var(--success)">{state.opciones[state.respuestaCorrecta]}</strong></p>
+    {/if}
     <ul>
       {#each Object.entries(state.respuestas) as [pid, ansRaw]}
         {@const ans = ansRaw as number}
-        <li>{nombre(pid)}: {String.fromCharCode(65+ans)} {ans===state.respuestaCorrecta ? '✅ +100' : '❌'}</li>
+        {#if state.config.modo === 'anio'}
+          {@const dif = Math.abs(ans - (state.respuestaCorrecta as number))}
+          <li>{nombre(pid)}: {ans} {dif <= 5 ? `✅ +100 (a ${dif})` : `❌ (a ${dif})`}</li>
+        {:else}
+          <li>{nombre(pid)}: {String.fromCharCode(65+ans)} {ans===state.respuestaCorrecta ? '✅ +100' : '❌'}</li>
+        {/if}
       {/each}
     </ul>
     <h3>Puntos</h3>
