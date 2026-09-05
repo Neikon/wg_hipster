@@ -107,37 +107,63 @@ describe('listas', () => {
     ])
   })
 
-  it('prepararPartida descarta sin audio y rescata por búsqueda', async () => {
-    const sinAudio = { id: 1, title: 'Tema X', artist: { name: 'Artista X' }, album: {}, preview: '' }
-    const conAudio = {
-      id: 2,
-      title: 'Tema Y',
-      artist: { name: 'Artista Y' },
-      album: { title: 'A', cover_medium: 'http://img' },
-      preview: 'https://clip.mp3'
+  it('prepararPartida enriquece el chart por lookup y descarta sin audio', async () => {
+    const rss = {
+      feed: {
+        entry: [
+          { id: { attributes: { 'im:id': '1' } }, 'im:name': { label: 'Tema A' }, 'im:artist': { label: 'Art A' } },
+          { id: { attributes: { 'im:id': '2' } }, 'im:name': { label: 'Tema B' }, 'im:artist': { label: 'Art B' } },
+          { id: { attributes: { 'im:id': '3' } }, 'im:name': { label: 'Tema C' }, 'im:artist': { label: 'Art C' } },
+          { id: { attributes: { 'im:id': '4' } }, 'im:name': { label: 'Tema D' }, 'im:artist': { label: 'Art D' } },
+          { id: { attributes: { 'im:id': '5' } }, 'im:name': { label: 'Tema E' }, 'im:artist': { label: 'Art E' } }
+        ]
+      }
     }
-    const rescate = {
-      id: 3,
-      title: 'Tema X',
-      artist: { name: 'Artista X' },
-      album: { title: 'B' },
-      preview: 'https://rescate.mp3'
-    }
+    const conAudio = (id: string) => ({
+      results: [
+        {
+          trackId: Number(id),
+          trackName: `Tema ${id}`,
+          artistName: `Art ${id}`,
+          collectionName: 'Album',
+          previewUrl: `https://clip${id}.m4a`,
+          artworkUrl100: 'https://img/100x100bb.jpg'
+        }
+      ]
+    })
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
-        if (url.includes('/chart/0/tracks')) return { ok: true, json: async () => ({ data: [sinAudio, conAudio, sinAudio, conAudio, conAudio] }) }
-        return { ok: true, json: async () => ({ data: [rescate] }) }
+        if (url.includes('/rss/')) return { ok: true, json: async () => rss }
+        if (url.includes('lookup?id=2')) return { ok: true, json: async () => ({ results: [{}] }) }
+        if (url.includes('/search?')) return { ok: true, json: async () => conAudio('9') }
+        const m = url.match(/lookup\?id=(\d+)/)
+        return { ok: true, json: async () => conAudio(m![1]) }
       })
     )
-    const r = await prepararPartida('top-global', 5)
+    const r = await prepararPartida('top-espana', 5)
     expect(r.tracks).toHaveLength(5)
     for (const t of r.tracks) expect(t.previewUrl).toMatch(/^https:\/\//)
-    expect(r.tracks.some((t) => t.previewUrl === 'https://rescate.mp3')).toBe(true)
+    // el id 2 se rescató por búsqueda (trackId 9)
+    expect(r.tracks.some((t) => t.trackId === 9)).toBe(true)
   })
 
-  it('prepararPartida falla si no hay suficientes con audio', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ data: [] }) })))
+  it('prepararPartida falla claro sin red o sin audio', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })))
+    await expect(prepararPartida('top-pop', 5)).rejects.toThrow(/descargar/i)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/rss/'))
+          return {
+            ok: true,
+            json: async () => ({
+              feed: { entry: [{ id: { attributes: { 'im:id': '1' } }, 'im:name': { label: 'A' }, 'im:artist': { label: 'B' } }] }
+            })
+          }
+        return { ok: true, json: async () => ({ results: [], resultCount: 0 }) }
+      })
+    )
     await expect(prepararPartida('top-pop', 5)).rejects.toThrow(/insuficiente/i)
   })
 })
