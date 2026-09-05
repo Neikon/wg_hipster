@@ -1,7 +1,7 @@
 import type { HipsterAction, HipsterState } from './types'
 import { TRACKS, label } from './tracks'
 
-export const SEGUNDOS = 15
+export const SEGUNDOS = 60
 export const PUNTOS_ACIERTO = 100
 
 function buildRonda(idx: number): Pick<HipsterState, 'clipUrl' | 'opciones' | 'respuestaCorrecta'> {
