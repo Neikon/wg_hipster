@@ -64,9 +64,11 @@ test('crear una segunda sala muestra datos limpios de la nueva', async ({ page }
 })
 
 test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
-  await page.goto('#/sala/corta1?host=1&name=Ana')
+  await page.goto('#/sala/corta1?host=1&name=Ana&segundos=30')
 
+  await expect(page.getByLabel('Segundos por ronda').first()).toHaveValue('30')
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
+  await expect(page.getByText('⏱ 30s').first()).toBeVisible()
   for (let i = 0; i < 5; i++) {
     await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
     await page.getByRole('button', { name: /^A\. / }).click()

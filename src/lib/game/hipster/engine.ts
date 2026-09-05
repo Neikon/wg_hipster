@@ -1,8 +1,13 @@
-import type { HipsterAction, HipsterState } from './types'
+import type { HipsterAction, HipsterConfig, HipsterState } from './types'
 import { TRACKS, label } from './tracks'
 
-export const SEGUNDOS = 60
+export const DEFAULT_CONFIG: HipsterConfig = { segundos: 60 }
 export const PUNTOS_ACIERTO = 100
+
+function normalizeConfig(input?: Partial<HipsterConfig>): HipsterConfig {
+  const segundos = Math.max(5, Math.min(300, Math.trunc(input?.segundos ?? DEFAULT_CONFIG.segundos)))
+  return { segundos: Number.isFinite(segundos) ? segundos : DEFAULT_CONFIG.segundos }
+}
 
 function buildRonda(idx: number): Pick<HipsterState, 'clipUrl' | 'opciones' | 'respuestaCorrecta'> {
   const track = TRACKS[idx % TRACKS.length]
@@ -13,7 +18,8 @@ function buildRonda(idx: number): Pick<HipsterState, 'clipUrl' | 'opciones' | 'r
   return { clipUrl: track.previewUrl, opciones: [label(track), ...distractores], respuestaCorrecta: 0 }
 }
 
-export function createInitialState(peers: { id: string }[]): HipsterState {
+export function createInitialState(peers: { id: string }[], config: Partial<HipsterConfig> = {}): HipsterState {
+  const normalized = normalizeConfig(config)
   const puntos: Record<string, number> = {}
   for (const p of peers) puntos[p.id] = 0
   return {
@@ -24,9 +30,10 @@ export function createInitialState(peers: { id: string }[]): HipsterState {
     respuestaCorrecta: 0,
     respuestas: {},
     puntos,
-    timer: SEGUNDOS,
+    timer: normalized.segundos,
     version: 0,
-    gameId: 'hipster'
+    gameId: 'hipster',
+    config: normalized
   }
 }
 
@@ -46,6 +53,7 @@ export function reducer(
   if (action.t === 'startGame') {
     if (!ctx.isHost) return state
     if (state.phase !== 'lobby' && state.phase !== 'final') return state
+    const config = normalizeConfig(action.config ?? state.config)
     const ronda = 0
     return {
       ...state,
@@ -53,7 +61,8 @@ export function reducer(
       ronda,
       ...buildRonda(ronda),
       respuestas: {},
-      timer: SEGUNDOS,
+      timer: config.segundos,
+      config,
       version: state.version + 1
     }
   }
@@ -88,13 +97,13 @@ export function reducer(
       ronda: nr,
       ...buildRonda(nr),
       respuestas: {},
-      timer: SEGUNDOS,
+      timer: state.config.segundos,
       version: state.version + 1
     }
   }
   if (action.t === 'restart') {
     if (!ctx.isHost) return state
-    const restarted = createInitialState(Object.keys(state.puntos).map((id) => ({ id })))
+    const restarted = createInitialState(Object.keys(state.puntos).map((id) => ({ id })), state.config)
     return { ...restarted, version: state.version + 1 }
   }
   if (action.t === 'playerJoined') {

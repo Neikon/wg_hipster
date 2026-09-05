@@ -7,6 +7,10 @@ export interface HipsterTrack {
   artworkUrl: string
 }
 
+export interface HipsterConfig {
+  segundos: number
+}
+
 export interface HipsterState {
   phase: 'lobby' | 'pregunta' | 'resultados' | 'final'
   ronda: number
@@ -18,10 +22,11 @@ export interface HipsterState {
   timer: number
   version: number
   gameId: 'hipster'
+  config: HipsterConfig
 }
 
 export type HipsterAction =
-  | { t: 'startGame'; juegoId?: 'hipster' }
+  | { t: 'startGame'; juegoId?: 'hipster'; config?: Partial<HipsterConfig> }
   | { t: 'answer'; opcion: number }
   | { t: 'tick' }
   | { t: 'next' }

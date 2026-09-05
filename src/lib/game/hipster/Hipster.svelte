@@ -1,20 +1,23 @@
 <script lang="ts">
   import { gameStore } from '../../stores/gameStore'
   import { roomStore } from '../../stores/roomStore'
+  import { DEFAULT_CONFIG } from './engine'
   import type { HipsterState } from './types'
 
   export let onAction: (a:any)=>void = ()=>{}
 
   let state: HipsterState
   let room: any
+  let segundos = DEFAULT_CONFIG.segundos
   $: state = $gameStore as HipsterState
   $: room = $roomStore
+  $: if (state.phase === 'lobby' && state.config) segundos = state.config.segundos
 
   function answer(opcion:number){
     if (state.respuestas[room.selfId] !== undefined) return
     onAction({ t:'answer', opcion })
   }
-  function start(){ onAction({ t:'startGame', juegoId:'hipster' }) }
+  function start(){ onAction({ t:'startGame', juegoId:'hipster', config: { segundos } }) }
   function next(){ onAction({ t:'next' }) }
   function restart(){ onAction({ t:'restart' }) }
   $: peers = room.peers
@@ -26,6 +29,10 @@
     <h2>Hipster musical (prueba)</h2>
     <p class="muted">Escucha el clip y adivina la canción. 5 rondas.</p>
     {#if room.isHost}
+      <label style="display:grid;gap:0.35rem;text-align:left;color:var(--muted);font-size:0.9rem;margin:1rem 0;max-width:240px">
+        Segundos por ronda
+        <input type="number" min="5" max="300" bind:value={segundos} />
+      </label>
       <button on:click={start}>Empezar hipster</button>
     {:else}
       <p class="muted">El anfitrión iniciará la partida.</p>

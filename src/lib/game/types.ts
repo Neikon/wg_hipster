@@ -18,7 +18,7 @@ export interface GameContext {
 export interface GameModule<S extends GameState = GameState, A = { t: string }> {
   id: string
   nombre: string
-  createInitialState(peers: GamePeer[]): S
+  createInitialState(peers: GamePeer[], config?: any): S
   reducer(state: S, action: A, ctx: GameContext): S
   Component?: any
 }

@@ -43,6 +43,16 @@ describe('hipster engine', () => {
     expect(reducer(s1, { t: 'answer', opcion: 0 }, { isHost: false, peerId: 'a' })).toBe(s1)
   })
 
+  it('respeta segundos personalizados y los limita a 5-300', () => {
+    expect(createInitialState([{ id: 'h' }], { segundos: 30 }).timer).toBe(30)
+    expect(createInitialState([{ id: 'h' }], { segundos: 9999 }).timer).toBe(300)
+    expect(createInitialState([{ id: 'h' }], { segundos: 1 }).timer).toBe(5)
+    let s = createInitialState([{ id: 'host1' }])
+    s = reducer(s, { t: 'startGame', juegoId: 'hipster', config: { segundos: 45 } }, host)
+    expect(s.timer).toBe(45)
+    expect(s.config.segundos).toBe(45)
+  })
+
   it('tick del host cierra la ronda y next avanza / termina en 5', () => {
     let s = createInitialState([{ id: 'host1' }])
     s = reducer(s, { t: 'startGame', juegoId: 'hipster' }, host)

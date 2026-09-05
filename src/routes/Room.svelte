@@ -14,7 +14,7 @@
   let salaId = ''
   let isHostParam = false
   let initialName = ''
-  // Un solo juego por defecto; ?juego= permite probar otro módulo registrado.
+  let initialSegundos: number | undefined = undefined
   // El campo juegoId se mantiene en el protocolo para robustez entre versiones.
   let juegoId = DEFAULT_GAME_ID
   let trystero: any = null
@@ -41,6 +41,8 @@
     initialName = q.get('name') ? decodeURIComponent(q.get('name')!) : ''
     const j = q.get('juego')
     if (j && getGameModule(j)) juegoId = j
+    const seg = parseInt(q.get('segundos') || '', 10)
+    initialSegundos = Number.isFinite(seg) ? seg : undefined
   }
 
   function showToast(msg:string){
@@ -110,7 +112,7 @@
       const initPeers = [{id: selfId, name: nameToUse}] as any
       const game = getGameModule(juegoId)
       const initState = game
-        ? game.createInitialState(initPeers)
+        ? game.createInitialState(initPeers, initialSegundos !== undefined ? { segundos: initialSegundos } : {})
         : { phase: 'lobby', version: 0, gameId: juegoId }
       gameStore.set(initState); gameState = initState
     } else {
