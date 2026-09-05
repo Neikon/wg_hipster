@@ -119,36 +119,6 @@ test('el host busca un álbum y arma su lista', async ({ page }) => {
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
 })
 
-test('el host filtra por canciones y arma su selección', async ({ page }) => {
-  const song = (id: number) => ({
-    trackId: id,
-    trackName: `Tema ${id}`,
-    artistName: 'Artista',
-    collectionName: 'Álbum',
-    previewUrl: `https://clip${id}.m4a`,
-    artworkUrl100: 'https://img/100x100bb.jpg'
-  })
-  await page.route('https://itunes.apple.com/search?*', (route) =>
-    route.fulfill({ json: { results: [song(1), song(2), song(3), song(4), song(5)] } })
-  )
-
-  await page.goto('#/sala/sel001?host=1&name=Ana')
-  await page.getByLabel('Lista de canciones').selectOption('__buscar__')
-  // solo canciones: desmarcar álbumes y artistas
-  await page.getByRole('checkbox', { name: 'Álbumes', exact: true }).click()
-  await page.getByRole('checkbox', { name: 'Artistas', exact: true }).click()
-  await page.getByLabel('Texto a buscar').fill('fiesta')
-  await page.getByRole('button', { name: '🔍' }).click()
-  for (let i = 1; i <= 4; i++) {
-    await page.getByRole('button', { name: new RegExp(`Tema ${i}`) }).click()
-  }
-  await expect(page.getByRole('button', { name: /Jugar con mi selección \(4\)/ })).toBeVisible()
-  await page.getByRole('button', { name: /Jugar con mi selección/ }).click()
-  await expect(page.getByText(/Lista ✓ 4 rondas/)).toBeVisible()
-  await page.getByRole('button', { name: /Empezar hipster/ }).click()
-  await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
-})
-
 test('el host busca una playlist de Deezer y juega', async ({ page }) => {
   const track = (id: number) => ({
     id,
@@ -179,7 +149,6 @@ test('el host busca una playlist de Deezer y juega', async ({ page }) => {
   await page.getByLabel('Lista de canciones').selectOption('__buscar__')
   await page.getByRole('checkbox', { name: 'Álbumes', exact: true }).click()
   await page.getByRole('checkbox', { name: 'Artistas', exact: true }).click()
-  await page.getByRole('checkbox', { name: 'Canciones', exact: true }).click()
   await page.getByLabel('Texto a buscar').fill('fiesta 80s')
   await page.getByRole('button', { name: '🔍' }).click()
   await page.getByRole('button', { name: /Fiesta 80s/ }).click()

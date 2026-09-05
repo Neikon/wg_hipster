@@ -313,31 +313,16 @@ export async function prepararPartida(listaId: string, numRondas: number): Promi
 
 // ==================== Búsqueda libre (el host arma su lista) ====================
 
-export type TipoBusqueda = 'album' | 'artista' | 'cancion' | 'lista'
-
+export type TipoBusqueda = 'album' | 'artista' | 'lista'
 export interface ResultadoBusqueda {
   tipo: TipoBusqueda
   id: number
   nombre: string
   subtitulo: string
   artworkUrl: string
-  /** Solo en canciones: el tema ya viene completo (con preview) del search. */
-  track?: HipsterTrack
 }
 
 function mapResultado(r: any, tipo: TipoBusqueda): ResultadoBusqueda | null {
-  if (tipo === 'cancion') {    const m = mapLookup(r)
-    if (!m?.previewUrl) return null
-    return {
-      tipo,
-      id: m.trackId,
-      nombre: m.titulo,
-      subtitulo: m.artista,
-      artworkUrl: m.artworkUrl,
-      track: { ...m }
-    }
-  }
-  const nombre = tipo === 'album' ? r?.collectionName : r?.artistName
   if (tipo === 'lista') {
     if (!r || typeof r.title !== 'string' || !Number.isFinite(Number(r.id))) return null
     return {
@@ -348,6 +333,7 @@ function mapResultado(r: any, tipo: TipoBusqueda): ResultadoBusqueda | null {
       artworkUrl: r.picture_medium ?? r.picture_small ?? ''
     }
   }
+  const nombre = tipo === 'album' ? r?.collectionName : r?.artistName
   if (!r || typeof nombre !== 'string' || !Number.isFinite(Number(tipo === 'album' ? r.collectionId : r.artistId))) {
     return null
   }
@@ -361,13 +347,13 @@ function mapResultado(r: any, tipo: TipoBusqueda): ResultadoBusqueda | null {
 }
 
 /**
- * Busca en iTunes (álbumes, artistas, canciones) y en Deezer (playlists).
+ * Busca en iTunes (álbumes y artistas) y en Deezer (playlists).
  * Nota: las playlists solo existen en Deezer; como su API no envía CORS,
  * se leen por JSONP (<script>) en vez de fetch. iTunes va por fetch.
  */
 export async function buscarEnItunes(
   query: string,
-  tipos: TipoBusqueda[] = ['album', 'artista', 'cancion', 'lista'],
+  tipos: TipoBusqueda[] = ['album', 'artista', 'lista'],
   country = 'ES'
 ): Promise<ResultadoBusqueda[]> {
   const q = query.trim()
@@ -392,16 +378,6 @@ export async function buscarEnItunes(
       )
         .catch(() => null)
         .then((d) => ({ tipo: 'artista' as const, d }))
-    )
-  }
-  if (tipos.includes('cancion')) {
-    peticiones.push(
-      fetchConReintentos(
-        `https://itunes.apple.com/search?term=${term}&media=music&entity=song&limit=10&country=${country}`,
-        1
-      )
-        .catch(() => null)
-        .then((d) => ({ tipo: 'cancion' as const, d }))
     )
   }
   if (tipos.includes('lista')) {
@@ -434,7 +410,6 @@ export async function prepararPartidaBusqueda(
   numRondas: number,
   country = 'ES'
 ): Promise<PartidaLista> {
-  if (sel.tipo === 'cancion') throw new Error('Las canciones se añaden de una en una a tu selección')
   const n = Math.max(4, Math.min(30, Math.trunc(numRondas) || 5))
   const cacheKey = `busq:${sel.tipo}:${sel.id}`
   let crudos = leerCache(cacheKey)

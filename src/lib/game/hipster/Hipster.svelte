@@ -21,13 +21,11 @@
   let descartados = 0
   // Búsqueda libre del host
   let textoBusq = ''
-  let filtroTipos: TipoBusqueda[] = ['album', 'artista', 'cancion', 'lista']
+  let filtroTipos: TipoBusqueda[] = ['album', 'artista', 'lista']
   let buscando = false
   let busqError = ''
   let resultados: ResultadoBusqueda[] = []
   let seleccion: ResultadoBusqueda | null = null
-  // Canciones sueltas elegidas una a una por el host (ya traen preview).
-  let miSeleccion: HipsterTrack[] = []
   $: state = $gameStore as HipsterState
   $: room = $roomStore
   $: if (state.phase === 'lobby' && state.config) {
@@ -35,7 +33,7 @@
     listaId = state.config.listaId
     numRondas = state.config.numRondas
   }
-  $: claveSel = seleccion ? `${seleccion.tipo}:${seleccion.id}` : miSeleccion.length ? `custom:${miSeleccion.map((t) => t.trackId).join(',')}` : ''
+  $: claveSel = seleccion ? `${seleccion.tipo}:${seleccion.id}` : ''
   // Si el host cambia de lista, rondas o selección, hay que volver a cargar.
   $: if (tracks && (listaId !== cargadaPara?.listaId || numRondas !== cargadaPara?.numRondas || claveSel !== (cargadaPara?.busq ?? ''))) {
     tracks = null
@@ -77,41 +75,10 @@
   }
 
   function elegir(r: ResultadoBusqueda){
-    if (r.tipo === 'cancion' && r.track) {
-      if (!miSeleccion.some((t) => t.trackId === r.track!.trackId)) {
-        miSeleccion = [...miSeleccion, r.track]
-      }
-      tracks = null
-      descartados = 0
-      return
-    }
     seleccion = r
-    miSeleccion = []
     tracks = null
     descartados = 0
     void cargar()
-  }
-
-  function quitarDeSeleccion(trackId: number){
-    miSeleccion = miSeleccion.filter((t) => t.trackId !== trackId)
-    tracks = null
-    descartados = 0
-  }
-
-  function usarMiSeleccion(){
-    if (miSeleccion.length < 4) {
-      cargaError = `Elige al menos 4 canciones (llevas ${miSeleccion.length})`
-      return
-    }
-    cargaError = ''
-    const pool = [...miSeleccion]
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[pool[i], pool[j]] = [pool[j], pool[i]]
-    }
-    tracks = pool.slice(0, Math.min(Math.max(4, Math.trunc(numRondas) || 5), pool.length))
-    descartados = 0
-    cargadaPara = { listaId, numRondas, busq: claveSel }
   }
 
   function answer(opcion:number){
@@ -148,7 +115,7 @@
             <fieldset style="border:0;margin:0;padding:0;display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
               <legend style="padding:0">Buscar por</legend>
               <span style="display:flex;gap:0.6rem;flex-wrap:wrap">
-                {#each [['album', 'Álbumes'], ['artista', 'Artistas'], ['cancion', 'Canciones'], ['lista', 'Listas']] as [v, etiqueta]}
+                {#each [['album', 'Álbumes'], ['artista', 'Artistas'], ['lista', 'Listas']] as [v, etiqueta]}
                   {@const val = v as TipoBusqueda}
                   <label style="display:flex;gap:0.3rem;align-items:center;color:var(--fg);font-size:0.85rem">
                     <input
@@ -165,7 +132,7 @@
               </span>
             </fieldset>
             <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
-              Buscar álbum, artista o canción
+              Buscar álbum, artista o lista
               <span style="display:flex;gap:0.4rem">
                 <input
                   placeholder="p. ej. top 80s, Queen…"
@@ -185,28 +152,14 @@
                   <li>
                     <button
                       on:click={()=>elegir(r)}
-                      style="display:flex;gap:0.6rem;align-items:center;width:100%;text-align:left;background:{(r.tipo !== 'cancion' && seleccion?.id===r.id && seleccion?.tipo===r.tipo) || (r.tipo === 'cancion' && miSeleccion.some((t)=>t.trackId===r.id)) ? 'var(--success)' : 'var(--card)'};border:1px solid var(--muted)"
+                      style="display:flex;gap:0.6rem;align-items:center;width:100%;text-align:left;background:{seleccion?.id===r.id && seleccion?.tipo===r.tipo ? 'var(--success)' : 'var(--card)'};border:1px solid var(--muted)"
                     >
                       {#if r.artworkUrl}<img src={r.artworkUrl} alt="" width="40" height="40" style="border-radius:4px" />{/if}
-                      <span><strong>{r.nombre}</strong><br /><small class="muted">{r.tipo === 'album' ? 'Álbum' : r.tipo === 'artista' ? 'Artista' : r.tipo === 'lista' ? 'Lista' : 'Canción'}{r.tipo === 'cancion' ? ' · toca para añadir' : ` · ${r.subtitulo}`}</small></span>
+                      <span><strong>{r.nombre}</strong><br /><small class="muted">{r.tipo === 'album' ? 'Álbum' : r.tipo === 'artista' ? 'Artista' : 'Lista'} · {r.subtitulo}</small></span>
                     </button>
                   </li>
                 {/each}
               </ul>
-            {/if}
-            {#if miSeleccion.length}
-              <div style="display:grid;gap:0.4rem;border-top:1px solid var(--muted);padding-top:0.5rem">
-                <strong style="font-size:0.9rem">Mi selección ({miSeleccion.length})</strong>
-                <ul style="list-style:none;margin:0;padding:0;display:grid;gap:0.3rem;max-height:160px;overflow:auto">
-                  {#each miSeleccion as t}
-                    <li style="display:flex;gap:0.5rem;align-items:center;justify-content:space-between;font-size:0.85rem">
-                      <span>{t.titulo} – {t.artista}</span>
-                      <button on:click={()=>quitarDeSeleccion(t.trackId)} style="background:var(--muted);padding:0.2rem 0.5rem" aria-label="Quitar {t.titulo}">✕</button>
-                    </li>
-                  {/each}
-                </ul>
-                <button on:click={usarMiSeleccion} style="background:var(--muted)">Jugar con mi selección ({miSeleccion.length})</button>
-              </div>
             {/if}
           </div>
         {/if}
@@ -233,8 +186,8 @@
       {:else if tracks}
         <button on:click={start}>Empezar hipster ({tracks.length} rondas)</button>
         <button on:click={cargar} style="background:var(--muted)">Recargar lista</button>
-      {:else if listaId === BUSCAR_ID && !seleccion && miSeleccion.length === 0}
-        <p class="muted">Busca y elige un álbum, un artista o tus canciones para armar tu lista.</p>
+      {:else if listaId === BUSCAR_ID && !seleccion}
+        <p class="muted">Busca y elige un álbum, un artista o una lista para jugar.</p>
       {:else}
         <button on:click={cargar}>Cargar lista</button>
       {/if}
