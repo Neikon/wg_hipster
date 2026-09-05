@@ -237,3 +237,103 @@ export async function prepararPartida(listaId: string, numRondas: number): Promi
   }))
   return { tracks, descartados }
 }
+
+// ==================== Búsqueda libre (el host arma su lista) ====================
+
+export interface ResultadoBusqueda {
+  tipo: 'album' | 'artista'
+  id: number
+  nombre: string
+  subtitulo: string
+  artworkUrl: string
+}
+
+function mapResultado(r: any, tipo: 'album' | 'artista'): ResultadoBusqueda | null {
+  const nombre = tipo === 'album' ? r?.collectionName : r?.artistName
+  if (!r || typeof nombre !== 'string' || !Number.isFinite(Number(tipo === 'album' ? r.collectionId : r.artistId))) {
+    return null
+  }
+  return {
+    tipo,
+    id: Number(tipo === 'album' ? r.collectionId : r.artistId),
+    nombre,
+    subtitulo: tipo === 'album' ? (r.artistName ?? '') : `${r.primaryGenreName ?? 'Artista'}`,
+    artworkUrl: typeof r.artworkUrl100 === 'string' ? artworkGrande(r.artworkUrl100) : ''
+  }
+}
+
+/** Busca álbumes y artistas en iTunes (p. ej. "80s", "Queen", "Top 80s"). */
+export async function buscarEnItunes(query: string, country = 'ES'): Promise<ResultadoBusqueda[]> {
+  const q = query.trim()
+  if (q.length < 2) return []
+  const term = encodeURIComponent(q)
+  const [albums, artistas] = await Promise.all([
+    fetchConReintentos(
+      `https://itunes.apple.com/search?term=${term}&media=music&entity=album&limit=8&country=${country}`,
+      1
+    ).catch(() => null),
+    fetchConReintentos(
+      `https://itunes.apple.com/search?term=${term}&media=music&entity=musicArtist&limit=5&country=${country}`,
+      1
+    ).catch(() => null)
+  ])
+  if (!albums && !artistas) throw new Error('No se pudo buscar (¿sin conexión?)')
+  const out: ResultadoBusqueda[] = []
+  for (const r of albums?.results ?? []) {
+    const m = mapResultado(r, 'album')
+    if (m && !out.some((o) => o.tipo === 'album' && o.id === m.id)) out.push(m)
+  }
+  for (const r of artistas?.results ?? []) {
+    const m = mapResultado(r, 'artista')
+    if (m && !out.some((o) => o.tipo === 'artista' && o.id === m.id)) out.push(m)
+  }
+  return out
+}
+
+/**
+ * Convierte un álbum o artista elegido en rondas completas:
+ * álbum → sus canciones por lookup; artista → sus top-canciones por search.
+ */
+export async function prepararPartidaBusqueda(
+  sel: ResultadoBusqueda,
+  numRondas: number,
+  country = 'ES'
+): Promise<PartidaLista> {
+  const n = Math.max(4, Math.min(30, Math.trunc(numRondas) || 5))
+  const cacheKey = `busq:${sel.tipo}:${sel.id}`
+  let crudos = leerCache(cacheKey)
+  if (!crudos) {
+    let candidatos: any[]
+    try {
+      if (sel.tipo === 'album') {
+        const d = await fetchConReintentos(
+          `https://itunes.apple.com/lookup?id=${sel.id}&country=${country}&entity=song`
+        )
+        candidatos = (d?.results ?? []).filter((r: any) => r?.wrapperType === 'track' && r?.kind === 'song')
+      } else {
+        const d = await fetchConReintentos(
+          `https://itunes.apple.com/search?term=${encodeURIComponent(sel.nombre)}&media=music&entity=song&limit=30&country=${country}&attribute=artistTerm`
+        )
+        candidatos = d?.results ?? []
+      }
+    } catch {
+      throw new Error('No se pudo descargar la selección (¿sin conexión?)')
+    }
+    crudos = candidatos.map(mapLookup).filter(Boolean) as Crudo[]
+    guardarCache(cacheKey, crudos)
+  }
+  const completos = crudos.filter((c) => !!c.previewUrl)
+  const descartados = crudos.length - completos.length
+  if (completos.length < 4) {
+    throw new Error(`Selección insuficiente: solo ${completos.length} temas con audio`)
+  }
+  const pool = [...completos]
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return {
+    tracks: pool.slice(0, Math.min(n, pool.length)),
+    descartados
+  }
+}

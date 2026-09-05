@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createInitialState, reducer } from '../../src/lib/game/hipster/engine'
 import { TRACKS } from '../../src/lib/game/hipster/tracks'
-import { LISTAS, prepararPartida } from '../../src/lib/game/hipster/listas'
+import { LISTAS, buscarEnItunes, prepararPartida, prepararPartidaBusqueda } from '../../src/lib/game/hipster/listas'
 import type { HipsterTrack } from '../../src/lib/game/hipster/types'
 
 const host = { isHost: true, peerId: 'host1' }
@@ -165,5 +165,52 @@ describe('listas', () => {
       })
     )
     await expect(prepararPartida('top-pop', 5)).rejects.toThrow(/insuficiente/i)
+  })
+
+  it('buscarEnItunes devuelve álbumes y artistas', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('entity=album'))
+          return {
+            ok: true,
+            json: async () => ({
+              results: [{ collectionId: 11, collectionName: 'Álbum 80s', artistName: 'Varios', artworkUrl100: 'https://img/100x100bb.jpg' }]
+            })
+          }
+        return {
+          ok: true,
+          json: async () => ({ results: [{ artistId: 22, artistName: 'Queen', primaryGenreName: 'Rock' }] })
+        }
+      })
+    )
+    const r = await buscarEnItunes('80s')
+    expect(r).toHaveLength(2)
+    expect(r[0]).toMatchObject({ tipo: 'album', id: 11, nombre: 'Álbum 80s' })
+    expect(r[1]).toMatchObject({ tipo: 'artista', id: 22, nombre: 'Queen' })
+    expect(await buscarEnItunes('x')).toEqual([])
+  })
+
+  it('prepararPartidaBusqueda arma rondas desde un álbum', async () => {
+    const song = (id: number) => ({
+      wrapperType: 'track',
+      kind: 'song',
+      trackId: id,
+      trackName: `Tema ${id}`,
+      artistName: 'Queen',
+      collectionName: 'Álbum',
+      previewUrl: `https://clip${id}.m4a`,
+      artworkUrl100: 'https://img/100x100bb.jpg'
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('entity=song')) return { ok: true, json: async () => ({ results: [{ wrapperType: 'collection' }, song(1), song(2), song(3), song(4), song(5)] }) }
+        return { ok: true, json: async () => ({ results: [] }) }
+      })
+    )
+    const r = await prepararPartidaBusqueda({ tipo: 'album', id: 11, nombre: 'Álbum', subtitulo: '', artworkUrl: '' }, 5)
+    expect(r.tracks).toHaveLength(5)
+    for (const t of r.tracks) expect(t.previewUrl).toMatch(/^https:\/\//)
   })
 })

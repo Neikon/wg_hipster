@@ -83,3 +83,38 @@ test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
   await page.getByRole('button', { name: /Volver al lobby/ }).click()
   await expect(page.getByRole('button', { name: /Empezar hipster/ })).toBeVisible()
 })
+
+test('el host busca un álbum y arma su lista', async ({ page }) => {
+  const song = (id: number) => ({
+    wrapperType: 'track',
+    kind: 'song',
+    trackId: id,
+    trackName: `Tema ${id}`,
+    artistName: 'Queen',
+    collectionName: 'Grandes éxitos',
+    previewUrl: `https://clip${id}.m4a`,
+    artworkUrl100: 'https://img/100x100bb.jpg'
+  })
+  await page.route('https://itunes.apple.com/search?*entity=album*', (route) =>
+    route.fulfill({
+      json: {
+        results: [{ collectionId: 11, collectionName: 'Grandes éxitos 80s', artistName: 'Queen', artworkUrl100: 'https://img/100x100bb.jpg' }]
+      }
+    })
+  )
+  await page.route('https://itunes.apple.com/search?*entity=musicArtist*', (route) =>
+    route.fulfill({ json: { results: [] } })
+  )
+  await page.route('https://itunes.apple.com/lookup?*entity=song', (route) =>
+    route.fulfill({ json: { results: [{ wrapperType: 'collection' }, song(1), song(2), song(3), song(4), song(5)] } })
+  )
+
+  await page.goto('#/sala/busq01?host=1&name=Ana')
+  await page.getByLabel('Lista de canciones').selectOption('__buscar__')
+  await page.getByLabel('Texto a buscar').fill('80s')
+  await page.getByRole('button', { name: '🔍' }).click()
+  await page.getByRole('button', { name: /Grandes éxitos 80s/ }).click()
+  await expect(page.getByText(/Lista ✓ 5 rondas/)).toBeVisible()
+  await page.getByRole('button', { name: /Empezar hipster/ }).click()
+  await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+})

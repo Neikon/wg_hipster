@@ -27,14 +27,14 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `vite.config.ts` — `base=VITE_BASE || '/wg_hipster/'`, `server/preview` con `host:true, strictPort:true` (devcontainer)
 - `.devcontainer/devcontainer.json` + `post-create.sh` — imagen `typescript-node:22`, puertos 5173/4173
 - `.github/workflows/pages.yml` — build (`VITE_BASE=/wg_hipster/`) + `deploy-pages@v4`
-- `tests/unit/` — 21 tests (hipster 10); `tests/e2e/` — 5 casos, incluido P2P real con dos contextos
+- `tests/unit/` — 23 tests (hipster 12); `tests/e2e/` — 6 casos, incluido P2P real con dos contextos
 
 ## Comandos (Node 22)
 
 ```bash
 npm ci            # instalar (postCreate del devcontainer ya lo hace)
 npm run dev       # http://localhost:5173
-npm run test      # vitest run (21 tests)
+npm run test      # vitest run (23 tests)
 npm run check     # svelte-check + tsc
 npm run build     # dist/ para Pages
 npm run test:e2e  # Playwright; E2E_P2P=1 hace obligatorio el caso de trackers

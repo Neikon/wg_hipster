@@ -2,10 +2,13 @@
   import { gameStore } from '../../stores/gameStore'
   import { roomStore } from '../../stores/roomStore'
   import { DEFAULT_CONFIG } from './engine'
-  import { LISTAS, prepararPartida } from './listas'
+  import { LISTAS, buscarEnItunes, prepararPartida, prepararPartidaBusqueda } from './listas'
+  import type { ResultadoBusqueda } from './listas'
   import type { HipsterState, HipsterTrack } from './types'
 
   export let onAction: (a:any)=>void = ()=>{}
+
+  const BUSCAR_ID = '__buscar__'
 
   let state: HipsterState
   let room: any
@@ -16,6 +19,12 @@
   let cargaError = ''
   let tracks: HipsterTrack[] | null = null
   let descartados = 0
+  // Búsqueda libre del host
+  let textoBusq = ''
+  let buscando = false
+  let busqError = ''
+  let resultados: ResultadoBusqueda[] = []
+  let seleccion: ResultadoBusqueda | null = null
   $: state = $gameStore as HipsterState
   $: room = $roomStore
   $: if (state.phase === 'lobby' && state.config) {
@@ -23,27 +32,52 @@
     listaId = state.config.listaId
     numRondas = state.config.numRondas
   }
-  // Si el host cambia de lista o rondas, hay que volver a cargar.
-  $: if (tracks && (listaId !== cargadaPara?.listaId || numRondas !== cargadaPara?.numRondas)) {
+  $: claveSel = seleccion ? `${seleccion.tipo}:${seleccion.id}` : ''
+  // Si el host cambia de lista, rondas o selección, hay que volver a cargar.
+  $: if (tracks && (listaId !== cargadaPara?.listaId || numRondas !== cargadaPara?.numRondas || claveSel !== (cargadaPara?.busq ?? ''))) {
     tracks = null
     descartados = 0
   }
-  let cargadaPara: { listaId: string; numRondas: number } | null = null
+  let cargadaPara: { listaId: string; numRondas: number; busq: string } | null = null
 
   async function cargar(){
     cargando = true
     cargaError = ''
     tracks = null
     try {
-      const r = await prepararPartida(listaId, numRondas)
+      const r = listaId === BUSCAR_ID && seleccion
+        ? await prepararPartidaBusqueda(seleccion, numRondas)
+        : await prepararPartida(listaId, numRondas)
       tracks = r.tracks
       descartados = r.descartados
-      cargadaPara = { listaId, numRondas }
+      cargadaPara = { listaId, numRondas, busq: claveSel }
     } catch (e) {
       cargaError = e instanceof Error ? e.message : 'No se pudo cargar la lista'
     } finally {
       cargando = false
     }
+  }
+
+  async function buscar(){
+    if (textoBusq.trim().length < 2 || buscando) return
+    buscando = true
+    busqError = ''
+    resultados = []
+    try {
+      resultados = await buscarEnItunes(textoBusq)
+      if (resultados.length === 0) busqError = 'Sin resultados, prueba con otro texto'
+    } catch (e) {
+      busqError = e instanceof Error ? e.message : 'No se pudo buscar'
+    } finally {
+      buscando = false
+    }
+  }
+
+  function elegir(r: ResultadoBusqueda){
+    seleccion = r
+    tracks = null
+    descartados = 0
+    void cargar()
   }
 
   function answer(opcion:number){
@@ -72,8 +106,43 @@
             {#each LISTAS as l}
               <option value={l.id}>{l.nombre}</option>
             {/each}
+            <option value={BUSCAR_ID}>🔍 Buscar mi lista…</option>
           </select>
         </label>
+        {#if listaId === BUSCAR_ID}
+          <div style="display:grid;gap:0.5rem">
+            <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
+              Buscar álbum o artista
+              <span style="display:flex;gap:0.4rem">
+                <input
+                  placeholder="p. ej. top 80s, Queen…"
+                  bind:value={textoBusq}
+                  on:keydown={(e)=>{ if (e.key === 'Enter') void buscar() }}
+                  aria-label="Texto a buscar"
+                  style="flex:1;min-width:0"
+                />
+                <button on:click={()=>void buscar()} disabled={buscando} style="background:var(--muted)">🔍</button>
+              </span>
+            </label>
+            {#if buscando}<p class="muted">Buscando…</p>{/if}
+            {#if busqError}<p style="color:var(--error)">{busqError}</p>{/if}
+            {#if resultados.length}
+              <ul style="list-style:none;margin:0;padding:0;display:grid;gap:0.4rem;max-height:220px;overflow:auto">
+                {#each resultados as r}
+                  <li>
+                    <button
+                      on:click={()=>elegir(r)}
+                      style="display:flex;gap:0.6rem;align-items:center;width:100%;text-align:left;background:{seleccion?.id===r.id&&seleccion?.tipo===r.tipo ? 'var(--success)' : 'var(--card)'};border:1px solid var(--muted)"
+                    >
+                      {#if r.artworkUrl}<img src={r.artworkUrl} alt="" width="40" height="40" style="border-radius:4px" />{/if}
+                      <span><strong>{r.nombre}</strong><br /><small class="muted">{r.tipo === 'album' ? 'Álbum' : 'Artista'} · {r.subtitulo}</small></span>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        {/if}
         <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
           Rondas
           <select bind:value={numRondas} aria-label="Número de rondas">
@@ -97,6 +166,8 @@
       {:else if tracks}
         <button on:click={start}>Empezar hipster ({tracks.length} rondas)</button>
         <button on:click={cargar} style="background:var(--muted)">Recargar lista</button>
+      {:else if listaId === BUSCAR_ID && !seleccion}
+        <p class="muted">Busca y elige un álbum o artista para armar tu lista.</p>
       {:else}
         <button on:click={cargar}>Cargar lista</button>
       {/if}
