@@ -36,7 +36,7 @@ describe('hipster engine', () => {
         {
           t: 'startGame',
           juegoId: 'hipster',
-          tracks: [{ titulo: 'X', artista: 'Y', previewUrl: '', trackId: 1, album: '', artworkUrl: '' }]
+          tracks: [{ titulo: 'X', artista: 'Y', previewUrl: '', trackId: 1, album: '', artworkUrl: '', anio: null }]
         },
         host
       )
@@ -81,7 +81,8 @@ describe('hipster engine', () => {
       artista: `Artista ${i}`,
       album: '',
       previewUrl: `https://extra${i}.m4a`,
-      artworkUrl: ''
+      artworkUrl: '',
+      anio: 2000 + i
     }))
     const corte = [...TRACKS].slice(0, 4)
     const pool = [...corte, ...extra]
@@ -313,10 +314,16 @@ describe('listas', () => {
       title: 'Tema P',
       artist: { name: 'Art P' },
       album: { title: 'Alb', cover_medium: 'https://cover' },
-      preview: 'https://clip.mp3'
+      preview: 'https://clip.mp3',
+      release_date: '2005-11-21'
     })
-    expect(m).toMatchObject({ trackId: 7, titulo: 'Tema P', artista: 'Art P', previewUrl: 'https://clip.mp3' })
+    expect(m).toMatchObject({ trackId: 7, titulo: 'Tema P', artista: 'Art P', previewUrl: 'https://clip.mp3', anio: 2005 })
     expect(mapTrackDeezer({ id: 8, title: 'Sin audio', artist: { name: 'X' }, preview: '' })?.previewUrl).toBe('')
+    expect(mapTrackDeezer({ id: 9, title: 'Sin fecha', artist: { name: 'X' }, preview: 'https://clip.mp3' })?.anio).toBeNull()
     expect(mapTrackDeezer(null)).toBeNull()
+  })
+
+  it('el fixture trae año en todos los temas', () => {
+    for (const t of TRACKS) expect(t.anio).toBeGreaterThanOrEqual(1900)
   })
 })

@@ -43,10 +43,17 @@ interface Crudo {
   album: string
   previewUrl: string
   artworkUrl: string
+  anio: number | null
 }
 
 function artworkGrande(url: string): string {
   return url.replace(/\/\d+x\d+bb\.jpg$/, '/600x600bb.jpg')
+}
+
+function anioDe(fecha: unknown): number | null {
+  if (typeof fecha !== 'string') return null
+  const y = Number(fecha.slice(0, 4))
+  return Number.isInteger(y) && y >= 1900 && y <= 2100 ? y : null
 }
 
 function mapLookup(r: any): Crudo | null {
@@ -57,7 +64,8 @@ function mapLookup(r: any): Crudo | null {
     artista: r.artistName,
     album: r.collectionName ?? '',
     previewUrl: typeof r.previewUrl === 'string' ? r.previewUrl : '',
-    artworkUrl: typeof r.artworkUrl100 === 'string' ? artworkGrande(r.artworkUrl100) : ''
+    artworkUrl: typeof r.artworkUrl100 === 'string' ? artworkGrande(r.artworkUrl100) : '',
+    anio: anioDe(r.releaseDate)
   }
 }
 
@@ -135,7 +143,8 @@ export function mapTrackDeezer(r: any): Crudo | null {
     artista: r.artist.name,
     album: r.album?.title ?? '',
     previewUrl: typeof r.preview === 'string' ? r.preview : '',
-    artworkUrl: r.album?.cover_medium ?? r.artist?.picture_medium ?? ''
+    artworkUrl: r.album?.cover_medium ?? r.artist?.picture_medium ?? '',
+    anio: anioDe(r.release_date)
   }
 }
 
@@ -315,7 +324,8 @@ export async function prepararPartida(listaId: string, numRondas: number): Promi
     artista: c.artista,
     album: c.album,
     previewUrl: c.previewUrl,
-    artworkUrl: c.artworkUrl
+    artworkUrl: c.artworkUrl,
+    anio: c.anio
   })
   return { tracks: pool.slice(0, Math.min(n, pool.length)).map(aTrack), pool: completos.map(aTrack), descartados }
 }

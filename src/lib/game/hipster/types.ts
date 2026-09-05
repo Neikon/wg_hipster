@@ -5,6 +5,8 @@ export interface HipsterTrack {
   album: string
   previewUrl: string
   artworkUrl: string
+  /** Año de lanzamiento (puede faltar según la fuente). */
+  anio: number | null
 }
 
 export interface HipsterConfig {

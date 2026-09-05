@@ -8,6 +8,7 @@ export const TRACKS: readonly HipsterTrack[] = [
     titulo: 'Blinding Lights',
     artista: 'The Weeknd',
     album: 'After Hours',
+    anio: 2019,
     previewUrl:
       'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/19/d6/60/19d660ff-e3a9-8377-15a3-ce4b28e89cac/mzaf_18422426156481158187.plus.aac.p.m4a',
     artworkUrl:
@@ -18,6 +19,7 @@ export const TRACKS: readonly HipsterTrack[] = [
     titulo: 'Bohemian Rhapsody',
     artista: 'Queen',
     album: 'Greatest Hits',
+    anio: 1975,
     previewUrl:
       'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/8f/11/52/8f1152a9-fd5f-0021-f546-b97579c22ec3/mzaf_3962258993076347789.plus.aac.p.m4a',
     artworkUrl:
@@ -28,6 +30,7 @@ export const TRACKS: readonly HipsterTrack[] = [
     titulo: 'Waka Waka (This Time for Africa)',
     artista: 'Shakira',
     album: 'Listen Up! The Official 2010 FIFA World Cup Album',
+    anio: 2010,
     previewUrl:
       'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/98/88/e5/9888e55d-4daf-0e96-480b-a38259013586/mzaf_9048311608369053538.plus.aac.p.m4a',
     artworkUrl:
@@ -38,6 +41,7 @@ export const TRACKS: readonly HipsterTrack[] = [
     titulo: 'Get Lucky',
     artista: 'Daft Punk',
     album: 'Random Access Memories',
+    anio: 2013,
     previewUrl:
       'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/57/a5/85/57a585aa-f1bc-7619-881b-f8a04a5541d5/mzaf_6906185026678279401.plus.aac.p.m4a',
     artworkUrl:
@@ -48,6 +52,7 @@ export const TRACKS: readonly HipsterTrack[] = [
     titulo: 'Dancing Queen',
     artista: 'ABBA',
     album: 'ABBA Gold: Greatest Hits',
+    anio: 1976,
     previewUrl:
       'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/ec/b1/63/ecb163bc-aff2-4dd2-d40b-c044f0b9fa4d/mzaf_4358783485405794088.plus.aac.p.m4a',
     artworkUrl:
