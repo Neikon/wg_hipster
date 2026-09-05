@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createInitialState, margenPara, pistasPara, reducer } from '../../src/lib/game/hipster/engine'
-import { TRACKS, pistaTitulo } from '../../src/lib/game/hipster/tracks'
+import { TRACKS, mostrarAlbum, pistaTitulo } from '../../src/lib/game/hipster/tracks'
 import { LISTAS, LISTA_FALLBACK, buscarEnItunes, getLista, mapTrackDeezer, prepararPartida, prepararPartidaBusqueda } from '../../src/lib/game/hipster/listas'
 import type { HipsterTrack } from '../../src/lib/game/hipster/types'
 
@@ -408,5 +408,15 @@ describe('listas', () => {
 
   it('el fixture trae año en todos los temas', () => {
     for (const t of TRACKS) expect(t.anio).toBeGreaterThanOrEqual(1900)
+  })
+
+  it('mostrarAlbum oculta el álbum si regala el título', () => {
+    // caso del pantallazo: single "Jolene" con álbum "Jolene"
+    expect(mostrarAlbum({ titulo: 'Jolene', album: 'Jolene' })).toBe(false)
+    expect(mostrarAlbum({ titulo: 'Jolene', album: 'Jolene - Single' })).toBe(false)
+    expect(mostrarAlbum({ titulo: 'Blinding Lights', album: 'Blinding Lights (Remix) - Single' })).toBe(false)
+    expect(mostrarAlbum({ titulo: 'X', album: '' })).toBe(false)
+    expect(mostrarAlbum({ titulo: 'Blinding Lights', album: 'After Hours' })).toBe(true)
+    expect(mostrarAlbum({ titulo: 'Up', album: 'Listen Up!' })).toBe(true)
   })
 })

@@ -64,9 +64,32 @@ export function label(t: HipsterTrack): string {
   return `${t.titulo} – ${t.artista}`
 }
 
+function normalizar(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+/**
+ * Dice si la pista de álbum aporta algo: en los singles el álbum suele ser
+ * el propio título ("Jolene" / "Jolene - Single") y mostrarlo regalaría la
+ * respuesta. También oculta álbumes vacíos.
+ */
+export function mostrarAlbum(track: Pick<HipsterTrack, 'titulo' | 'album'>): boolean {
+  const album = normalizar(track.album)
+  const titulo = normalizar(track.titulo)
+  if (!album || !titulo) return false
+  if (album === titulo) return false
+  const [corto, largo] = album.length < titulo.length ? [album, titulo] : [titulo, album]
+  if (corto.length >= 4 && largo.includes(corto)) return false
+  return true
+}
+
 /** Pista del título: primera letra de cada palabra + guiones (p. ej. "B_______ L_____"). */
-export function pistaTitulo(titulo: string): string {
-  return titulo
+export function pistaTitulo(titulo: string): string {  return titulo
     .split(/\s+/)
     .filter(Boolean)
     .map((w) => {

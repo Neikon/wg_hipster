@@ -5,7 +5,7 @@
   import { LISTAS, buscarEnItunes, prepararPartida, prepararPartidaBusqueda } from './listas'
   import type { ResultadoBusqueda, TipoBusqueda } from './listas'
   import type { HipsterState, HipsterTrack, Dificultad, ModoJuego, Pista } from './types'
-  import { pistaTitulo } from './tracks'
+  import { pistaTitulo, mostrarAlbum } from './tracks'
 
   export let onAction: (a:any)=>void = ()=>{}
 
@@ -288,7 +288,7 @@
           {#if pistasCfg.includes('artista')}<li>🎤 Artista: <strong>{trackActual.artista}</strong></li>{/if}
           {#if pistasCfg.includes('titulo')}<li>🔤 Título: <strong>{state.config.modo === 'titulo' ? pistaTitulo(trackActual.titulo) : trackActual.titulo}</strong></li>{/if}
           {#if pistasCfg.includes('anio') && trackActual.anio !== null}<li>📅 Año: <strong>{trackActual.anio}</strong></li>{/if}
-          {#if pistasCfg.includes('album')}<li>💿 Álbum: <strong>{trackActual.album}</strong></li>{/if}
+          {#if pistasCfg.includes('album') && mostrarAlbum(trackActual)}<li>💿 Álbum: <strong>{trackActual.album}</strong></li>{/if}
         </ul>
       {/if}
       <div style="display:grid;gap:0.6rem;margin-top:1rem">

@@ -1,5 +1,6 @@
 import type { HipsterTrack } from './types'
 import { TRACKS } from './tracks'
+import { mostrarAlbum } from './tracks'
 
 export type ListaFuente = 'itunes-rss' | 'fixture'
 
@@ -58,11 +59,15 @@ function anioDe(fecha: unknown): number | null {
 
 function mapLookup(r: any): Crudo | null {
   if (!r || typeof r.trackName !== 'string' || typeof r.artistName !== 'string') return null
+  const titulo = r.trackName
+  let album = r.collectionName ?? ''
+  // los singles traen el propio título como álbum: no aporta nada y regalaría la respuesta
+  if (!mostrarAlbum({ titulo, album })) album = ''
   return {
     trackId: Number(r.trackId) || 0,
-    titulo: r.trackName,
+    titulo,
     artista: r.artistName,
-    album: r.collectionName ?? '',
+    album,
     previewUrl: typeof r.previewUrl === 'string' ? r.previewUrl : '',
     artworkUrl: typeof r.artworkUrl100 === 'string' ? artworkGrande(r.artworkUrl100) : '',
     anio: anioDe(r.releaseDate)
@@ -137,11 +142,14 @@ export function jsonp<T>(baseUrl: string, timeoutMs = 12000): Promise<T> {
 /** Mapea un track de Deezer a nuestro formato (exportado para tests). */
 export function mapTrackDeezer(r: any): Crudo | null {
   if (!r || typeof r.title !== 'string' || !r.artist?.name) return null
+  const titulo = r.title
+  let album = r.album?.title ?? ''
+  if (!mostrarAlbum({ titulo, album })) album = ''
   return {
     trackId: Number(r.id) || 0,
-    titulo: r.title,
+    titulo,
     artista: r.artist.name,
-    album: r.album?.title ?? '',
+    album,
     previewUrl: typeof r.preview === 'string' ? r.preview : '',
     artworkUrl: r.album?.cover_medium ?? r.artist?.picture_medium ?? '',
     anio: anioDe(r.release_date)
