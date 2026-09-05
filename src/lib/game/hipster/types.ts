@@ -10,12 +10,14 @@ export interface HipsterTrack {
 }
 
 export type ModoJuego = 'titulo' | 'anio'
+export type Dificultad = 'facil' | 'normal' | 'dificil'
 
 export interface HipsterConfig {
   segundos: number
   listaId: string
   numRondas: number
   modo: ModoJuego
+  dificultad: Dificultad
 }
 
 export interface HipsterState {

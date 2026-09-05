@@ -1,10 +1,14 @@
-import type { HipsterAction, HipsterConfig, HipsterState, HipsterTrack, ModoJuego } from './types'
+import type { HipsterAction, HipsterConfig, HipsterState, HipsterTrack, Dificultad, ModoJuego } from './types'
 import { label } from './tracks'
 
-export const DEFAULT_CONFIG: HipsterConfig = { segundos: 60, listaId: 'fiesta-clasicos', numRondas: 5, modo: 'titulo' }
+export const DEFAULT_CONFIG: HipsterConfig = { segundos: 60, listaId: 'fiesta-clasicos', numRondas: 5, modo: 'titulo', dificultad: 'normal' }
 export const PUNTOS_ACIERTO = 100
-/** Margen del modo año: se da por bueno ±5 años. */
-export const MARGEN_ANIO = 5
+/** Margen del modo año según dificultad: fácil ±10, normal ±5, difícil ±2. */
+export function margenPara(dificultad: Dificultad): number {
+  if (dificultad === 'facil') return 10
+  if (dificultad === 'dificil') return 2
+  return 5
+}
 
 function normalizeConfig(input?: Partial<HipsterConfig>): HipsterConfig {
   const rawSeg = Math.trunc(input?.segundos ?? DEFAULT_CONFIG.segundos)
@@ -13,7 +17,9 @@ function normalizeConfig(input?: Partial<HipsterConfig>): HipsterConfig {
   const numRondas = Number.isFinite(rawRon) ? Math.max(4, Math.min(30, rawRon)) : DEFAULT_CONFIG.numRondas
   const listaId = typeof input?.listaId === 'string' && input.listaId ? input.listaId : DEFAULT_CONFIG.listaId
   const modo: ModoJuego = input?.modo === 'anio' ? 'anio' : 'titulo'
-  return { segundos, listaId, numRondas, modo }
+  const dificultad: Dificultad =
+    input?.dificultad === 'facil' || input?.dificultad === 'dificil' ? input.dificultad : 'normal'
+  return { segundos, listaId, numRondas, modo, dificultad }
 }
 
 function tracksValidos(tracks: unknown): tracks is HipsterTrack[] {
@@ -98,15 +104,15 @@ export function createInitialState(peers: { id: string }[], config: Partial<Hips
   }
 }
 
-function esAcierto(modo: ModoJuego, respuesta: number, correcta: number): boolean {
-  if (modo === 'anio') return Math.abs(respuesta - correcta) <= MARGEN_ANIO
+function esAcierto(modo: ModoJuego, dificultad: Dificultad, respuesta: number, correcta: number): boolean {
+  if (modo === 'anio') return Math.abs(respuesta - correcta) <= margenPara(dificultad)
   return respuesta === correcta
 }
 
 function toResultados(state: HipsterState): HipsterState {
   const puntos = { ...state.puntos }
   for (const [pid, ans] of Object.entries(state.respuestas)) {
-    if (esAcierto(state.config.modo, ans, state.respuestaCorrecta)) {
+    if (esAcierto(state.config.modo, state.config.dificultad, ans, state.respuestaCorrecta)) {
       puntos[pid] = (puntos[pid] ?? 0) + PUNTOS_ACIERTO
     }
   }

@@ -1,10 +1,11 @@
 <script lang="ts">
   import { gameStore } from '../../stores/gameStore'
   import { roomStore } from '../../stores/roomStore'
-  import { DEFAULT_CONFIG } from './engine'
+  import { DEFAULT_CONFIG, margenPara } from './engine'
   import { LISTAS, buscarEnItunes, prepararPartida, prepararPartidaBusqueda } from './listas'
   import type { ResultadoBusqueda, TipoBusqueda } from './listas'
-  import type { HipsterState, HipsterTrack, ModoJuego } from './types'
+  import type { HipsterState, HipsterTrack, Dificultad, ModoJuego } from './types'
+  import { pistaTitulo } from './tracks'
 
   export let onAction: (a:any)=>void = ()=>{}
 
@@ -16,6 +17,7 @@
   let listaId = DEFAULT_CONFIG.listaId
   let numRondas = DEFAULT_CONFIG.numRondas
   let modo: ModoJuego = DEFAULT_CONFIG.modo
+  let dificultad: Dificultad = DEFAULT_CONFIG.dificultad
   let anioEscrito: number | null = null
   let cargando = false
   let cargaError = ''
@@ -36,6 +38,7 @@
     listaId = state.config.listaId
     numRondas = state.config.numRondas
     modo = state.config.modo
+    dificultad = state.config.dificultad
   }
   $: claveSel = seleccion ? `${seleccion.tipo}:${seleccion.id}` : ''
   // Si el host cambia de lista, modo, rondas o selección, hay que volver a cargar.
@@ -107,7 +110,7 @@
   }
   function start(){
     if (!tracks || !pool) return
-    onAction({ t:'startGame', juegoId:'hipster', config: { segundos, listaId, numRondas, modo }, tracks, pool })
+    onAction({ t:'startGame', juegoId:'hipster', config: { segundos, listaId, numRondas, modo, dificultad }, tracks, pool })
   }
   function next(){ onAction({ t:'next' }) }
   function restart(){ onAction({ t:'restart' }) }
@@ -191,6 +194,14 @@
           </select>
         </label>
         <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
+          Dificultad
+          <select bind:value={dificultad} aria-label="Dificultad">
+            <option value="facil">Fácil{modo === 'titulo' ? ' (artista + pista)' : ' (±10 años)'}</option>
+            <option value="normal">Normal{modo === 'titulo' ? ' (solo artista)' : ' (±5 años)'}</option>
+            <option value="dificil">Difícil{modo === 'titulo' ? ' (sin pistas)' : ' (±2 años)'}</option>
+          </select>
+        </label>
+        <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
           Rondas
           <select bind:value={numRondas} aria-label="Número de rondas">
             <option value={5}>5 rondas</option>
@@ -238,9 +249,18 @@
           />
           <button on:click={answerAnio}>Responder</button>
         </div>
-        <p class="muted" style="margin-top:0.5rem">Vale cualquier año a ±5 del correcto.</p>
+        <p class="muted" style="margin-top:0.5rem">Vale cualquier año a ±{margenPara(state.config.dificultad)} del correcto.</p>
       {/if}
     {:else}
+      {@const trackActual = state.tracks[state.ronda]}
+      {#if state.config.dificultad !== 'dificil' && trackActual}
+        <p class="muted" style="margin-top:1rem">
+          🎤 Artista: <strong>{trackActual.artista}</strong>
+          {#if state.config.dificultad === 'facil'}
+            <br />🔤 Pista: <strong>{pistaTitulo(trackActual.titulo)}</strong>
+          {/if}
+        </p>
+      {/if}
       <div style="display:grid;gap:0.6rem;margin-top:1rem">
         {#each state.opciones as op, idx}
           <button
@@ -266,7 +286,8 @@
         {@const ans = ansRaw as number}
         {#if state.config.modo === 'anio'}
           {@const dif = Math.abs(ans - (state.respuestaCorrecta as number))}
-          <li>{nombre(pid)}: {ans} {dif <= 5 ? `✅ +100 (a ${dif})` : `❌ (a ${dif})`}</li>
+          {@const margen = margenPara(state.config.dificultad)}
+          <li>{nombre(pid)}: {ans} {dif <= margen ? `✅ +100 (a ${dif})` : `❌ (a ${dif})`}</li>
         {:else}
           <li>{nombre(pid)}: {String.fromCharCode(65+ans)} {ans===state.respuestaCorrecta ? '✅ +100' : '❌'}</li>
         {/if}

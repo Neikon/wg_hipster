@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { createInitialState, reducer } from '../../src/lib/game/hipster/engine'
-import { TRACKS } from '../../src/lib/game/hipster/tracks'
+import { createInitialState, margenPara, reducer } from '../../src/lib/game/hipster/engine'
+import { TRACKS, pistaTitulo } from '../../src/lib/game/hipster/tracks'
 import { LISTAS, LISTA_FALLBACK, buscarEnItunes, getLista, mapTrackDeezer, prepararPartida, prepararPartidaBusqueda } from '../../src/lib/game/hipster/listas'
 import type { HipsterTrack } from '../../src/lib/game/hipster/types'
 
@@ -184,6 +184,37 @@ describe('hipster engine', () => {
     expect(
       reducer(base, { t: 'startGame', juegoId: 'hipster', config: { modo: 'anio' }, tracks: sinAnio, pool: sinAnio }, host)
     ).toBe(base)
+  })
+
+  it('dificultad: margen de año y pista de título', () => {
+    expect(margenPara('facil')).toBe(10)
+    expect(margenPara('normal')).toBe(5)
+    expect(margenPara('dificil')).toBe(2)
+    expect(pistaTitulo('Blinding Lights')).toBe('B_______ L_____')
+    expect(pistaTitulo('Waka Waka (This Time for Africa)')).toBe('W___ W___ (____ T___ f__ A_____)')
+
+    // difícil: a 3 años ya no vale
+    const base = createInitialState([{ id: 'host1' }], { modo: 'anio', dificultad: 'dificil' })
+    const s = reducer(
+      base,
+      { t: 'startGame', juegoId: 'hipster', config: { modo: 'anio', dificultad: 'dificil' }, tracks: [...TRACKS], pool: [...TRACKS] },
+      host
+    )
+    expect(s.config.dificultad).toBe('dificil')
+    const n = reducer(s, { t: 'answer', opcion: (s.respuestaCorrecta as number) + 3 }, { isHost: false, peerId: 'host1' })
+    expect(n.puntos['host1']).toBe(0)
+
+    // fácil: a 8 años sí vale
+    const f = reducer(
+      createInitialState([{ id: 'h2' }], { modo: 'anio', dificultad: 'facil' }),
+      { t: 'startGame', juegoId: 'hipster', config: { modo: 'anio', dificultad: 'facil' }, tracks: [...TRACKS], pool: [...TRACKS] },
+      { isHost: true, peerId: 'h2' }
+    )
+    const nf = reducer(f, { t: 'answer', opcion: (f.respuestaCorrecta as number) + 8 }, { isHost: false, peerId: 'h2' })
+    expect(nf.puntos['h2']).toBe(100)
+
+    // dificultad inválida → normal
+    expect(createInitialState([{ id: 'h' }], { dificultad: 'extrema' as never }).config.dificultad).toBe('normal')
   })
 
   it('ignora duplicados y opciones inválidas', () => {

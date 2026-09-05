@@ -63,3 +63,20 @@ export const TRACKS: readonly HipsterTrack[] = [
 export function label(t: HipsterTrack): string {
   return `${t.titulo} – ${t.artista}`
 }
+
+/** Pista del título: primera letra de cada palabra + guiones (p. ej. "B_______ L_____"). */
+export function pistaTitulo(titulo: string): string {
+  return titulo
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => {
+      const letras = [...w]
+      const primera = letras[0] ?? ''
+      const resto = letras
+        .slice(1)
+        .map((ch) => (/[\p{L}\p{N}]/u.test(ch) ? '_' : ch))
+        .join('')
+      return primera + resto
+    })
+    .join(' ')
+}
