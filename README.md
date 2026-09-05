@@ -4,7 +4,7 @@ Juego de fiesta multijugador en navegador. **Sin servidor ni base de datos**, 10
 
 - **Stack:** Svelte + Vite + TypeScript + Trystero (WebRTC P2P via trackers públicos)
 - **Flujo:** Crear sala → compartir enlace `#/sala/<id>` → lobby → juego
-- **Juego:** hipster musical (adivina la canción con clips de iTunes)
+- **Juego:** hipster musical (adivina la canción; el host carga listas de Deezer y las reparte por P2P)
 - **Host migration:** Si el anfitrión se va, el siguiente jugador toma el control sin perder estado
 
 ## Uso rápido

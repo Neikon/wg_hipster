@@ -9,11 +9,14 @@ export interface HipsterTrack {
 
 export interface HipsterConfig {
   segundos: number
+  listaId: string
+  numRondas: number
 }
 
 export interface HipsterState {
   phase: 'lobby' | 'pregunta' | 'resultados' | 'final'
   ronda: number
+  tracks: HipsterTrack[]
   clipUrl: string
   opciones: string[]
   respuestaCorrecta: number
@@ -26,7 +29,7 @@ export interface HipsterState {
 }
 
 export type HipsterAction =
-  | { t: 'startGame'; juegoId?: 'hipster'; config?: Partial<HipsterConfig> }
+  | { t: 'startGame'; juegoId?: 'hipster'; config?: Partial<HipsterConfig>; tracks?: HipsterTrack[] }
   | { t: 'answer'; opcion: number }
   | { t: 'tick' }
   | { t: 'next' }

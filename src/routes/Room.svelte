@@ -307,11 +307,22 @@
     </div>
 
     <ShareLink {salaId} {juegoId} />
+  {:else}
+    <!-- ============ JUEGO ============ -->
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.8rem">
+      <span class="muted" style="font-size:0.85rem"><code>{salaId}</code></span>
+      <button on:click={salir} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Salir</button>
+    </div>
+  {/if}
 
-    <div style="display:grid;gap:1rem;margin-top:1rem">
-      <div>
-        <Game {juegoId} onAction={handleGameAction} />
-      </div>
+  <!-- Una sola instancia de Game en ambas fases: va fuera de todo condicional
+       para que Svelte no la destruya al cambiar de fase (perdería su estado
+       local, p. ej. la lista cargada por el host). -->
+  <div style="display:grid;gap:1rem;margin-top:1rem">
+    <div>
+      <Game {juegoId} onAction={handleGameAction} />
+    </div>
+    {#if gameState.phase === 'lobby'}
       <div>
         <h3>Jugadores ({peers.length}/20)</h3>
         <PlayerList peers={peers} hostId={hostId} />
@@ -320,14 +331,6 @@
           <NameInput value={peers.find(p=>p.id===selfId)?.name || ''} on:save={onRename} />
         </div>
       </div>
-    </div>
-  {:else}
-    <!-- ============ JUEGO ============ -->
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.8rem">
-      <span class="muted" style="font-size:0.85rem"><code>{salaId}</code></span>
-      <button on:click={salir} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Salir</button>
-    </div>
-
-    <Game {juegoId} onAction={handleGameAction} />
-  {/if}
+    {/if}
+  </div>
 </div>

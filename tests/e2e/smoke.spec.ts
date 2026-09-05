@@ -32,7 +32,8 @@ test('al empezar el juego se ocultan los elementos del lobby', async ({ page }) 
   await page.getByRole('button', { name: /Ver QR/ }).click()
   await expect(page.getByAltText(/QR para unirse/)).toBeVisible()
 
-  // el anfitrión empieza la partida
+  // el anfitrión carga la lista y empieza la partida
+  await page.getByRole('button', { name: /Cargar lista/ }).click()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
 
   // juego: clip visible a pantalla completa, sin elementos de lobby
@@ -67,6 +68,8 @@ test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
   await page.goto('#/sala/corta1?host=1&name=Ana&segundos=30')
 
   await expect(page.getByLabel('Segundos por ronda').first()).toHaveValue('30')
+  await page.getByRole('button', { name: /Cargar lista/ }).click()
+  await expect(page.getByText(/Lista ✓ 5 rondas/)).toBeVisible()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
   await expect(page.getByText('⏱ 30s').first()).toBeVisible()
   for (let i = 0; i < 5; i++) {

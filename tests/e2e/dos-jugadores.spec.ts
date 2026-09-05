@@ -28,6 +28,7 @@ test('sincroniza host e invitado a través de la red P2P', async ({ browser }, t
       throw error
     }
 
+    await host.getByRole('button', { name: /Cargar lista/ }).click()
     await host.getByRole('button', { name: /Empezar hipster/ }).click()
     await expect(host.getByText(/¿Qué canción es\?/)).toBeVisible()
     await expect(guest.getByText(/¿Qué canción es\?/)).toBeVisible({ timeout: 10_000 })

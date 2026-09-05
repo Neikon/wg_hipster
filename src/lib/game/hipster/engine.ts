@@ -1,18 +1,41 @@
-import type { HipsterAction, HipsterConfig, HipsterState } from './types'
-import { TRACKS, label } from './tracks'
+import type { HipsterAction, HipsterConfig, HipsterState, HipsterTrack } from './types'
+import { label } from './tracks'
 
-export const DEFAULT_CONFIG: HipsterConfig = { segundos: 60 }
+export const DEFAULT_CONFIG: HipsterConfig = { segundos: 60, listaId: 'fiesta-clasicos', numRondas: 5 }
 export const PUNTOS_ACIERTO = 100
 
 function normalizeConfig(input?: Partial<HipsterConfig>): HipsterConfig {
-  const segundos = Math.max(5, Math.min(300, Math.trunc(input?.segundos ?? DEFAULT_CONFIG.segundos)))
-  return { segundos: Number.isFinite(segundos) ? segundos : DEFAULT_CONFIG.segundos }
+  const rawSeg = Math.trunc(input?.segundos ?? DEFAULT_CONFIG.segundos)
+  const segundos = Number.isFinite(rawSeg) ? Math.max(5, Math.min(300, rawSeg)) : DEFAULT_CONFIG.segundos
+  const rawRon = Math.trunc(input?.numRondas ?? DEFAULT_CONFIG.numRondas)
+  const numRondas = Number.isFinite(rawRon) ? Math.max(4, Math.min(30, rawRon)) : DEFAULT_CONFIG.numRondas
+  const listaId = typeof input?.listaId === 'string' && input.listaId ? input.listaId : DEFAULT_CONFIG.listaId
+  return { segundos, listaId, numRondas }
 }
 
-function buildRonda(idx: number): Pick<HipsterState, 'clipUrl' | 'opciones' | 'respuestaCorrecta'> {
-  const track = TRACKS[idx % TRACKS.length]
-  // Correcta fija en posición 0 para la prueba; distractores = otros títulos.
-  const distractores = TRACKS.filter((_, i) => i % TRACKS.length !== idx % TRACKS.length)
+function tracksValidos(tracks: unknown): tracks is HipsterTrack[] {
+  return (
+    Array.isArray(tracks) &&
+    tracks.length >= 4 &&
+    tracks.every(
+      (t) =>
+        t &&
+        typeof t.titulo === 'string' &&
+        typeof t.artista === 'string' &&
+        typeof t.previewUrl === 'string' &&
+        t.previewUrl.startsWith('http')
+    )
+  )
+}
+
+function buildRonda(
+  tracks: HipsterTrack[],
+  idx: number
+): Pick<HipsterState, 'clipUrl' | 'opciones' | 'respuestaCorrecta'> {
+  const track = tracks[idx % tracks.length]
+  // Correcta fija en posición 0; distractores = otros títulos de la partida.
+  const distractores = tracks
+    .filter((_, i) => i % tracks.length !== idx % tracks.length)
     .slice(0, 3)
     .map(label)
   return { clipUrl: track.previewUrl, opciones: [label(track), ...distractores], respuestaCorrecta: 0 }
@@ -25,6 +48,7 @@ export function createInitialState(peers: { id: string }[], config: Partial<Hips
   return {
     phase: 'lobby',
     ronda: 0,
+    tracks: [],
     clipUrl: '',
     opciones: [],
     respuestaCorrecta: 0,
@@ -53,13 +77,17 @@ export function reducer(
   if (action.t === 'startGame') {
     if (!ctx.isHost) return state
     if (state.phase !== 'lobby' && state.phase !== 'final') return state
+    // La partida solo arranca con rondas 100 % completas (inyectadas por el host).
+    const tracks = tracksValidos(action.tracks) ? action.tracks : null
+    if (!tracks) return state
     const config = normalizeConfig(action.config ?? state.config)
     const ronda = 0
     return {
       ...state,
       phase: 'pregunta',
       ronda,
-      ...buildRonda(ronda),
+      tracks,
+      ...buildRonda(tracks, ronda),
       respuestas: {},
       timer: config.segundos,
       config,
@@ -90,12 +118,12 @@ export function reducer(
     if (!ctx.isHost) return state
     if (state.phase !== 'resultados') return state
     const nr = state.ronda + 1
-    if (nr >= TRACKS.length) return { ...state, phase: 'final', version: state.version + 1 }
+    if (nr >= state.tracks.length) return { ...state, phase: 'final', version: state.version + 1 }
     return {
       ...state,
       phase: 'pregunta',
       ronda: nr,
-      ...buildRonda(nr),
+      ...buildRonda(state.tracks, nr),
       respuestas: {},
       timer: state.config.segundos,
       version: state.version + 1
@@ -103,6 +131,7 @@ export function reducer(
   }
   if (action.t === 'restart') {
     if (!ctx.isHost) return state
+    // Rejugar conserva config; las rondas se reinyectan al empezar.
     const restarted = createInitialState(Object.keys(state.puntos).map((id) => ({ id })), state.config)
     return { ...restarted, version: state.version + 1 }
   }

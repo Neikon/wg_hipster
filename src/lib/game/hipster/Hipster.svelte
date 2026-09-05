@@ -2,22 +2,58 @@
   import { gameStore } from '../../stores/gameStore'
   import { roomStore } from '../../stores/roomStore'
   import { DEFAULT_CONFIG } from './engine'
-  import type { HipsterState } from './types'
+  import { LISTAS, prepararPartida } from './listas'
+  import type { HipsterState, HipsterTrack } from './types'
 
   export let onAction: (a:any)=>void = ()=>{}
 
   let state: HipsterState
   let room: any
   let segundos = DEFAULT_CONFIG.segundos
+  let listaId = DEFAULT_CONFIG.listaId
+  let numRondas = DEFAULT_CONFIG.numRondas
+  let cargando = false
+  let cargaError = ''
+  let tracks: HipsterTrack[] | null = null
+  let descartados = 0
   $: state = $gameStore as HipsterState
   $: room = $roomStore
-  $: if (state.phase === 'lobby' && state.config) segundos = state.config.segundos
+  $: if (state.phase === 'lobby' && state.config) {
+    segundos = state.config.segundos
+    listaId = state.config.listaId
+    numRondas = state.config.numRondas
+  }
+  // Si el host cambia de lista o rondas, hay que volver a cargar.
+  $: if (tracks && (listaId !== cargadaPara?.listaId || numRondas !== cargadaPara?.numRondas)) {
+    tracks = null
+    descartados = 0
+  }
+  let cargadaPara: { listaId: string; numRondas: number } | null = null
+
+  async function cargar(){
+    cargando = true
+    cargaError = ''
+    tracks = null
+    try {
+      const r = await prepararPartida(listaId, numRondas)
+      tracks = r.tracks
+      descartados = r.descartados
+      cargadaPara = { listaId, numRondas }
+    } catch (e) {
+      cargaError = e instanceof Error ? e.message : 'No se pudo cargar la lista'
+    } finally {
+      cargando = false
+    }
+  }
 
   function answer(opcion:number){
     if (state.respuestas[room.selfId] !== undefined) return
     onAction({ t:'answer', opcion })
   }
-  function start(){ onAction({ t:'startGame', juegoId:'hipster', config: { segundos } }) }
+  function start(){
+    if (!tracks) return
+    onAction({ t:'startGame', juegoId:'hipster', config: { segundos, listaId, numRondas }, tracks })
+  }
   function next(){ onAction({ t:'next' }) }
   function restart(){ onAction({ t:'restart' }) }
   $: peers = room.peers
@@ -26,21 +62,51 @@
 
 {#if state.phase === 'lobby'}
   <div class="card">
-    <h2>Hipster musical (prueba)</h2>
-    <p class="muted">Escucha el clip y adivina la canción. 5 rondas.</p>
+    <h2>🎵 Hipster musical</h2>
+    <p class="muted">Escucha el clip y adivina la canción.</p>
     {#if room.isHost}
-      <label style="display:grid;gap:0.35rem;text-align:left;color:var(--muted);font-size:0.9rem;margin:1rem 0;max-width:240px">
-        Segundos por ronda
-        <input type="number" min="5" max="300" bind:value={segundos} />
-      </label>
-      <button on:click={start}>Empezar hipster</button>
+      <div style="display:grid;gap:0.8rem;margin:1rem 0;max-width:320px;text-align:left">
+        <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
+          Lista
+          <select bind:value={listaId} aria-label="Lista de canciones">
+            {#each LISTAS as l}
+              <option value={l.id}>{l.nombre}</option>
+            {/each}
+          </select>
+        </label>
+        <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
+          Rondas
+          <select bind:value={numRondas} aria-label="Número de rondas">
+            <option value={5}>5 rondas</option>
+            <option value={10}>10 rondas</option>
+            <option value={20}>20 rondas</option>
+          </select>
+        </label>
+        <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
+          Segundos por ronda
+          <input type="number" min="5" max="300" bind:value={segundos} />
+        </label>
+      </div>
+      {#if tracks}
+        <p class="muted">Lista ✓ {tracks.length} rondas con audio{#if descartados} ({descartados} sin audio descartados){/if}</p>
+      {:else if cargaError}
+        <p style="color:var(--error)">{cargaError}</p>
+      {/if}
+      {#if cargando}
+        <button disabled>Cargando música…</button>
+      {:else if tracks}
+        <button on:click={start}>Empezar hipster ({tracks.length} rondas)</button>
+        <button on:click={cargar} style="background:var(--muted)">Recargar lista</button>
+      {:else}
+        <button on:click={cargar}>Cargar lista</button>
+      {/if}
     {:else}
-      <p class="muted">El anfitrión iniciará la partida.</p>
+      <p class="muted">El anfitrión está preparando la música…</p>
     {/if}
   </div>
 {:else if state.phase === 'pregunta'}
   <div class="card">
-    <div style="display:flex;justify-content:space-between"><strong>Ronda {state.ronda+1}/5 · ¿Qué canción es?</strong><span>⏱ {state.timer}s</span></div>
+    <div style="display:flex;justify-content:space-between"><strong>Ronda {state.ronda+1}/{state.tracks.length} · ¿Qué canción es?</strong><span>⏱ {state.timer}s</span></div>
     <audio controls src={state.clipUrl} style="width:100%;margin-top:1rem" aria-label="Clip musical"></audio>
     <div style="display:grid;gap:0.6rem;margin-top:1rem">
       {#each state.opciones as op, idx}
