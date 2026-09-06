@@ -37,18 +37,27 @@ button {
   color: #fff;
   border: none;
   padding: 0.6rem 1.2rem;
-  border-radius: 8px;
+  border-radius: 999px;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.08s ease, background-color 0.15s ease;
 }
 button:hover { background: var(--accent-hover) }
+button:active { transform: scale(0.98) }
 button:disabled { opacity: 0.5; cursor: not-allowed }
 input, select {
   background: var(--card);
   color: var(--fg);
   border: 1px solid var(--muted);
   padding: 0.5rem 0.8rem;
-  border-radius: 6px;
+  border-radius: 12px;
+}
+/* Botones de respuesta estilo M3 tonal */
+.btn-respuesta {
+  background: var(--card);
+  color: var(--fg);
+  border-radius: 16px;
+  padding: 0.8rem 1rem;
 }
 .card {
   background: var(--card);
@@ -57,6 +66,21 @@ input, select {
   box-shadow: var(--shadow);
 }
 .container { max-width: 720px; margin: 0 auto; padding: 2rem 1rem }
+/* Tinte dinámico de carátula: tiñe fondo y acentos de la sala con transición */
+.sala {
+  border-radius: 20px;
+  transition: background-color 0.4s ease;
+}
+.sala[data-tinte='1'] {
+  background-color: var(--tinte-fondo);
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+/* Texto sobre el acento teñido (contraste AA garantizado) */
+.sala[data-tinte='1'] .repro-btn,
+.sala[data-tinte='1'] .btn-respuesta {
+  color: var(--tinte-texto);
+}
 h1,h2 { margin: 0 0 0.5rem; letter-spacing: -0.01em }
 .muted { color: var(--muted) }
 

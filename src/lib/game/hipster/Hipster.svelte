@@ -6,6 +6,8 @@
   import type { ResultadoBusqueda, TipoBusqueda } from './listas'
   import type { HipsterState, HipsterTrack, Dificultad, ModoJuego, Pista } from './types'
   import { pistaTitulo, mostrarAlbum } from './tracks'
+  import { tinteActual, tinteDeCaratula } from './colores'
+  import { theme } from '../../../lib/stores/theme'
   import Reproductor from '../../../components/Reproductor.svelte'
 
   export let onAction: (a:any)=>void = ()=>{}
@@ -125,6 +127,30 @@
   function restart(){ onAction({ t:'restart' }) }
   $: peers = room.peers
   function nombre(pid:string){ return peers.find((p:any)=>p.id===pid)?.name || pid.slice(0,4) }
+
+  // Tinte dinámico de la carátula durante pregunta/resultados; en lobby se limpia.
+  // Solo se recalcula al cambiar de fase o de ronda (no en cada tick).
+  // Se ignora el resultado si la ronda cambió mientras se calculaba.
+  let tintePara = ''
+  $: {
+    const fase = state.phase
+    const track = fase === 'pregunta' || fase === 'resultados' ? state.tracks[state.ronda] : null
+    const tema = $theme
+    const clave = track ? `${fase}:${track.trackId}:${tema}` : `${fase}:${tema}`
+    if (clave !== tintePara) {
+      tintePara = clave
+      if (!track?.artworkUrl) {
+        tinteActual.set(null)
+      } else {
+        const id = track.trackId
+        tinteDeCaratula(track.artworkUrl, id, tema).then((t) => {
+          if (state.tracks[state.ronda]?.trackId === id && (state.phase === 'pregunta' || state.phase === 'resultados')) {
+            tinteActual.set(t)
+          }
+        })
+      }
+    }
+  }
 </script>
 
 {#if state.phase === 'lobby'}
@@ -310,6 +336,7 @@
           <button
             on:click={()=>answer(idx)}
             disabled={state.respuestas[room.selfId] !== undefined}
+            class="btn-respuesta"
             style="text-align:left;border:1px solid var(--muted)"
           >{String.fromCharCode(65+idx)}. {op} {state.respuestas[room.selfId]===idx ? '✓' : ''}</button>
         {/each}

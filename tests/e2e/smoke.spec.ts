@@ -86,6 +86,8 @@ test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
   await expect(page.getByText('⏱ 30s').first()).toBeVisible()
   for (let i = 0; i < 5; i++) {
     await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+    // tinte dinámico de la carátula activo durante la ronda
+    await expect(page.locator('.sala[data-tinte="1"]')).toBeVisible()
     await page.getByRole('button', { name: /^A\. / }).click()
     await expect(page.getByRole('heading', { name: 'Resultados' })).toBeVisible()
     if (i === 0) {
@@ -101,6 +103,8 @@ test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /Clasificación final/ })).toBeVisible()
   await page.getByRole('button', { name: /Volver al lobby/ }).click()
   await expect(page.getByRole('button', { name: /Empezar hipster/ })).toBeVisible()
+  // en el lobby se restaura el tema (sin tinte)
+  await expect(page.locator('.sala[data-tinte="0"]')).toBeVisible()
 })
 
 test('el host busca un álbum y arma su lista', async ({ page }) => {

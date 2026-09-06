@@ -20,6 +20,7 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `src/routes/{Landing,Room,Game}.svelte` — páginas; `Room.svelte` contiene la lógica P2P agnóstica al juego (hello/requestState/stateSync/action/rename, heartbeat 2 s, tick host 1 s, `electNewHost`; un solo juego)
 - `src/components/{PlayerList,ShareLink,NameInput}.svelte` — UI lobby
 - `src/app.css` + `src/lib/stores/theme.ts` + `src/components/ThemeToggle.svelte` — estilo festival póster dual (claro/oscuro según sistema + toggle persistido)
+- `src/lib/game/hipster/colores.ts` — color dinámico de carátula (Canvas + contraste WCAG AA, store `tinteActual`)
 - `src/lib/net/{types,trysteroAdapter,room,transport}.ts` — `Msg`, adapter Trystero (`appId='wg_hipster_v1_'+salaId`, 6 trackers, 5 STUN), `electNewHost`/`isRoomFull`
 - `src/lib/net/syncEngine.ts` — `SyncNode`: protocolo P2P (hello+eco/requestState/stateSync/action/rename, heartbeat 2 s, tick 1 s, migración de host); el invitado se incluye desde el inicio, reintenta sync y emite `synced`
 - `src/lib/stores/{roomStore,gameStore}.ts` — `roomStore` (sala/peers/joinOrder/isHost) + `gameStore` (aplica `stateSync` solo si versión mayor)
@@ -29,13 +30,13 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `vite.config.ts` — `base=VITE_BASE || '/wg_hipster/'`, `server/preview` con `host:true, strictPort:true` (devcontainer)
 - `.devcontainer/devcontainer.json` + `post-create.sh` — imagen `typescript-node:22`, puertos 5173/4173
 - `.github/workflows/pages.yml` — build (`VITE_BASE=/wg_hipster/`) + `deploy-pages@v4`
-- `tests/unit/` — 52 tests (hipster 23, salaN 10 multijugador 2–20, robustez+transporte 6, tema 2); `tests/e2e/` — 10 casos, incluido P2P real con dos contextos
+- `tests/unit/` — 57 tests (hipster 23, salaN 10 multijugador 2–20, robustez+transporte 6, tema 2, colores 5); `tests/e2e/` — 10 casos, incluido P2P real con dos contextos
 ## Comandos (Node 22)
 
 ```bash
 npm ci            # instalar (postCreate del devcontainer ya lo hace)
 npm run dev       # http://localhost:5173
-npm run test      # vitest run (52 tests)
+npm run test      # vitest run (57 tests)
 npm run check     # svelte-check + tsc
 npm run build     # dist/ para Pages
 npm run test:e2e  # Playwright; E2E_P2P=1 hace obligatorio el caso de trackers

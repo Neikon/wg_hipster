@@ -74,9 +74,15 @@
   }
   .repro audio { display: none }
   .repro-btn {
-    font-size: 1.1rem;
-    padding: 0.35rem 0.7rem;
+    font-size: 1.3rem;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    border-radius: 20px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .repro-tiempo { font-size: 0.85rem; color: var(--muted); min-width: 2.6em; text-align: center }
   .repro-barra { flex: 1; accent-color: var(--accent); min-width: 0 }

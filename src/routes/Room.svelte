@@ -12,6 +12,8 @@
   import NameInput from '../components/NameInput.svelte'
   import ThemeToggle from '../components/ThemeToggle.svelte'
   import Game from './Game.svelte'
+  import { tinteActual } from '../lib/game/hipster/colores'
+  import type { Tinte } from '../lib/game/hipster/colores'
 
   function genId() { return Math.random().toString(36).slice(2, 9) }
 
@@ -203,6 +205,8 @@
   onDestroy(()=>{
     if (unsubRoom) unsubRoom()
     if (unsubGame) unsubGame()
+    unsubTinte()
+    tinteActual.set(null)
     if (secondInt) clearInterval(secondInt)
     if (trystero) trystero.leave()
   })
@@ -221,9 +225,18 @@
     if (trystero) trystero.leave()
     location.hash = '#/'
   }
+
+  let tinte: Tinte | null = null
+  const unsubTinte = tinteActual.subscribe((t)=> (tinte = t))
 </script>
 
-<div class="container">
+<div
+  class="container sala"
+  data-tinte={tinte ? '1' : '0'}
+  style={tinte
+    ? `--tinte-fondo:${tinte.fondo};--accent:${tinte.acento};--accent-hover:${tinte.acento};--tinte-texto:${tinte.sobreAcento}`
+    : ''}
+>
   {#if toast}<div style="background:var(--success);color:var(--bg);padding:0.6rem 1rem;border-radius:8px;margin:1rem 0">{toast}</div>{/if}
   {#if salaFull}<div style="background:var(--error);color:white;padding:0.6rem 1rem;border-radius:8px;margin:1rem 0">Sala llena (20 jugadores)</div>{/if}
   {#if !isHost && !synced}
