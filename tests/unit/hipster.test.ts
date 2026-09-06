@@ -94,6 +94,30 @@ describe('hipster engine', () => {
     expect(a.opciones[a.respuestaCorrecta]).toContain(TRACKS[0].titulo)
   })
 
+  it('las opciones muestran solo el título (sin delatar al artista)', () => {
+    const s = empezar(createInitialState([{ id: 'host1' }]))
+    for (const op of s.opciones) {
+      expect(op).not.toContain('–')
+    }
+    expect(s.opciones[s.respuestaCorrecta]).toBe(TRACKS[0].titulo)
+  })
+
+  it('desempata con artista si dos temas comparten título', () => {
+    const dup: HipsterTrack[] = [1, 2, 3, 4].map((i) => ({
+      trackId: i,
+      titulo: i < 3 ? 'Mismo' : `Otro ${i}`,
+      artista: `Art ${i}`,
+      album: '',
+      previewUrl: `https://clip${i}.m4a`,
+      artworkUrl: '',
+      anio: 2000
+    }))
+    const s = empezar(createInitialState([{ id: 'host1' }]), dup, dup)
+    // la correcta (track 1, título duplicado) lleva artista para distinguirse
+    expect(s.opciones[s.respuestaCorrecta]).toContain('Art 1')
+    expect(new Set(s.opciones).size).toBe(4)
+  })
+
   it('los distractores salen del pool completo, no del corte de rondas', () => {
     const extra: HipsterTrack[] = [6, 7, 8].map((i) => ({
       trackId: 1000 + i,
@@ -109,7 +133,7 @@ describe('hipster engine', () => {
     const s = empezar(createInitialState([{ id: 'host1' }]), corte, pool)
     expect(s.pool).toHaveLength(7)
     // en 4 rondas con corte de 4, algún distractor debe venir del extra
-    const etiquetasCorte = new Set(corte.map((t) => `${t.titulo} – ${t.artista}`))
+    const etiquetasCorte = new Set(corte.map((t) => t.titulo))
     let hayDeFuera = false
     let cur = s
     for (let i = 0; i < 4; i++) {

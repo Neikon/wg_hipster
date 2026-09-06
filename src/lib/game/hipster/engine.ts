@@ -79,10 +79,16 @@ function buildRonda(
   if (modo === 'anio') {
     return { clipUrl: track.previewUrl, opciones: [], respuestaCorrecta: track.anio ?? 0 }
   }
-  const correcta = label(track)
+  // Las opciones muestran SOLO el título: el artista saldría en las pistas y
+  // delataría la respuesta. Si dos temas comparten título se desempata con el artista.
   const fuente = pool.length >= 4 ? pool : tracks
+  const etiqueta = (t: HipsterTrack): string => {
+    const mismoTitulo = fuente.some((o) => o.trackId !== t.trackId && o.titulo === t.titulo)
+    return mismoTitulo ? label(t) : t.titulo
+  }
+  const correcta = etiqueta(track)
   const rand = rng(track.trackId * 31 + idx * 101 + fuente.length)
-  const candidatos = fuente.filter((t) => t.trackId !== track.trackId).map(label)
+  const candidatos = fuente.filter((t) => t.trackId !== track.trackId).map(etiqueta)
   // quitar duplicados de etiqueta (mismo título de otro álbum) y barajar
   const vistos = new Set<string>()
   const unicos = candidatos.filter((l) => (vistos.has(l) ? false : (vistos.add(l), true)))
