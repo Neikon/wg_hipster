@@ -283,9 +283,9 @@
       {#if cargando}
         <button disabled>Cargando música…</button>
       {:else if tracks}
-        <div style="display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap;margin-top:1rem">
-          <button on:click={start}>Empezar hipster ({tracks.length} rondas)</button>
-          <button on:click={cargar} style="background:var(--muted)">Recargar lista</button>
+        <div style="display:grid;gap:0.5rem;margin-top:1rem">
+          <button on:click={start} style="width:100%">Empezar hipster ({tracks.length} rondas)</button>
+          <button on:click={cargar} style="width:100%;background:var(--muted)">Recargar lista</button>
         </div>
       {:else if listaId === BUSCAR_ID && !seleccion}
         <p class="muted">Busca y elige un álbum, un artista o una lista para jugar.</p>
