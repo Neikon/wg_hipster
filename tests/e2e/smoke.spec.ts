@@ -165,6 +165,10 @@ test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
       await expect(page.getByText('🎵 Título:', { exact: false })).toBeVisible()
       await expect(page.getByText('🎤 Artista:', { exact: false })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Reproducir' })).toBeVisible()
+      // la tarjeta deja pasar el tinte (no es el fondo sólido del tema)
+      const cardBg = await page.evaluate(() => getComputedStyle(document.querySelector('.sala .card')!).backgroundColor);
+      const cardVar = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--card').trim());
+      expect(cardBg).not.toContain(cardVar);
     }
     if (i < 4) await page.getByRole('button', { name: 'Siguiente' }).click()
   }

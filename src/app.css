@@ -95,6 +95,15 @@ input[type='checkbox'], input[type='radio'] {
   padding-left: 1rem;
   padding-right: 1rem;
 }
+/* Con tinte, tarjetas y controles dejan pasar el color (navegadores sin
+   color-mix ignoran la regla y siguen con el fondo sólido) */
+.sala[data-tinte='1'] .card {
+  background: color-mix(in srgb, var(--card) 68%, transparent);
+}
+.sala[data-tinte='1'] .btn-respuesta,
+.sala[data-tinte='1'] .repro {
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+}
 /* Texto sobre el acento teñido (contraste AA garantizado) */
 .sala[data-tinte='1'] .repro-btn,
 .sala[data-tinte='1'] .btn-respuesta {
