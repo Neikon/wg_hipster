@@ -56,6 +56,75 @@ test('al empezar el juego se ocultan los elementos del lobby', async ({ page }) 
   await expect(page.getByRole('heading', { name: /Cambiar nombre/ })).toBeHidden()
 })
 
+test('en móvil (360px) la ronda no desborda horizontalmente', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 })
+  await page.goto('#/sala/mov001?host=1&name=Ana')
+  await page.getByRole('button', { name: /Cargar lista/ }).click()
+  await page.getByRole('button', { name: /Empezar hipster/ }).click()
+  await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+  // ni el documento ni la tarjeta desbordan (la tarjeta se salía visualmente)
+  for (const sel of ['document.documentElement', '.sala', '.card']) {
+    const ok = await page.evaluate(
+      (s) => {
+        const el = s === 'document.documentElement' ? document.documentElement : document.querySelector(s);
+        return el ? el.getBoundingClientRect().right <= window.innerWidth + 1 : false;
+      },
+      sel
+    );
+    expect(ok, sel).toBe(true);
+  }
+  await page.getByRole('button', { name: /^A\. / }).click()
+  await expect(page.getByRole('heading', { name: 'Resultados' })).toBeVisible()
+  const cardOk = await page.evaluate(() => {
+    const el = document.querySelector('.card');
+    return el ? el.getBoundingClientRect().right <= window.innerWidth + 1 : false;
+  });
+  expect(cardOk).toBe(true);
+})
+
+test('títulos largos sin espacios no desbordan la tarjeta', async ({ page }) => {
+  const largo = 'Supercalifragilisticoespialidosoextraordinario'
+  const track = (id: number) => ({
+    id,
+    title: `${largo}${id}`,
+    artist: { name: 'ArtistaLarguísimoSinEspacios' },
+    album: { title: 'Álbum', cover_medium: '' },
+    preview: `https://clip${id}.mp3`
+  })
+  await page.route('https://api.deezer.com/search/playlist?*', (route) => {
+    const cb = new URL(route.request().url()).searchParams.get('callback') ?? 'cb'
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `${cb}({"data":[{"id":998,"title":"Largas","nb_tracks":5,"picture_medium":""}]})`
+    })
+  })
+  await page.route('https://api.deezer.com/playlist/998/tracks?*', (route) => {
+    const cb = new URL(route.request().url()).searchParams.get('callback') ?? 'cb'
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `${cb}({"data":[${[1, 2, 3, 4, 5].map((i) => JSON.stringify(track(i))).join(',')}]})`
+    })
+  })
+  await page.route('https://itunes.apple.com/*', (route) => route.fulfill({ json: { results: [], resultCount: 0 } }))
+
+  await page.setViewportSize({ width: 360, height: 740 })
+  await page.goto('#/sala/lar001?host=1&name=Ana')
+  await page.getByLabel('Lista de canciones').selectOption('__buscar__')
+  // activar la pista de título: genera una palabra larga sin espacios
+  await page.getByRole('checkbox', { name: 'Título', exact: true }).click()
+  await page.getByLabel('Texto a buscar').fill('largas')
+  await page.getByRole('button', { name: '🔍' }).click()
+  await page.getByRole('button', { name: /Largas/ }).click()
+  await expect(page.getByText(/Lista ✓ 5 rondas/)).toBeVisible()
+  await page.getByRole('button', { name: /Empezar hipster/ }).click()
+  await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+  const cardOk = await page.evaluate(() => {
+    const el = document.querySelector('.card');
+    return el ? el.getBoundingClientRect().right <= window.innerWidth + 1 : false;
+  });
+  expect(cardOk).toBe(true);
+})
+
 test('crear una segunda sala muestra datos limpios de la nueva', async ({ page }) => {
   await page.goto('#/')
   await page.getByRole('button', { name: /Crear sala/ }).click()

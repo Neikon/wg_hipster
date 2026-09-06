@@ -25,6 +25,8 @@
   --shadow: 0 8px 24px rgba(28, 25, 23, 0.12);
 }
 * { box-sizing: border-box }
+html, body { overflow-x: clip }
+img, audio, video { max-width: 100% }
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Svelte, sans-serif;
@@ -72,12 +74,15 @@ input[type='checkbox'], input[type='radio'] {
   color: var(--fg);
   border-radius: 16px;
   padding: 0.8rem 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .card {
   background: var(--card);
   border-radius: 16px;
   padding: 1.5rem;
   box-shadow: var(--shadow);
+  overflow-wrap: break-word;
 }
 .container { max-width: 880px; margin: 0 auto; padding: 2rem 1rem }
 /* Tinte dinámico de carátula: tiñe fondo y acentos de la sala con transición */
@@ -104,7 +109,11 @@ h1,h2 { margin: 0 0 0.5rem; letter-spacing: -0.01em }
 :root[data-theme='light'] .modo-titulo { --accent: #7c3aed; --accent-hover: #6d28d9 }
 :root[data-theme='light'] .modo-anio { --accent: #d97706; --accent-hover: #b45309 }
 
+/* Lista de pistas: los items no deben ensanchar la tarjeta (grid blowout) */
+.pistas > li { min-width: 0 }
+
 /* Carátula protagonista */
+.pistas > li { min-width: 0 }
 .cover {
   width: min(64vw, 240px);
   aspect-ratio: 1;

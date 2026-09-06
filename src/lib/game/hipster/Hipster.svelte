@@ -299,7 +299,7 @@
 {:else if state.phase === 'pregunta'}
   {@const ronda = state.tracks[state.ronda]}
   <div class="card {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}">
-    <div style="display:flex;justify-content:space-between"><strong>Ronda {state.ronda+1}/{state.tracks.length} · {state.config.modo === 'anio' ? '¿De qué año es?' : '¿Qué canción es?'}</strong><span>⏱ {state.timer}s</span></div>
+    <div style="display:flex;justify-content:space-between;gap:0.5rem;flex-wrap:wrap"><strong style="min-width:0">Ronda {state.ronda+1}/{state.tracks.length} · {state.config.modo === 'anio' ? '¿De qué año es?' : '¿Qué canción es?'}</strong><span style="white-space:nowrap">⏱ {state.timer}s</span></div>
     {#if ronda?.artworkUrl}
       <img class="cover cover-blur" src={ronda.artworkUrl} alt="Carátula difuminada" />
     {:else}
@@ -326,7 +326,7 @@
       {@const trackActual = state.tracks[state.ronda]}
       {@const pistasCfg = state.config.pistas}
       {#if trackActual && pistasCfg.length}
-        <ul class="muted" style="margin:1rem 0 0;padding-left:1.2rem;display:grid;gap:0.2rem">
+        <ul class="muted pistas" style="margin:1rem 0 0;padding-left:1.2rem;display:grid;gap:0.2rem;grid-template-columns:minmax(0,1fr);overflow-wrap:anywhere;word-break:break-all">
           {#if pistasCfg.includes('artista')}<li>🎤 Artista: <strong>{trackActual.artista}</strong></li>{/if}
           {#if pistasCfg.includes('titulo')}<li>🔤 Título: <strong>{state.config.modo === 'titulo' ? pistaTitulo(trackActual.titulo) : trackActual.titulo}</strong></li>{/if}
           {#if pistasCfg.includes('anio') && trackActual.anio !== null}<li>📅 Año: <strong>{trackActual.anio}</strong></li>{/if}

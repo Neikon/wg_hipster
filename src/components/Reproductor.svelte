@@ -84,6 +84,6 @@
     align-items: center;
     justify-content: center;
   }
-  .repro-tiempo { font-size: 0.85rem; color: var(--muted); min-width: 2.6em; text-align: center }
-  .repro-barra { flex: 1; accent-color: var(--accent); min-width: 0 }
+  .repro-tiempo { font-size: 0.85rem; color: var(--muted); min-width: 2.6em; text-align: center; white-space: nowrap; flex-shrink: 0 }
+  .repro-barra { flex: 1 1 auto; width: 0; min-width: 0; accent-color: var(--accent); }
 </style>
