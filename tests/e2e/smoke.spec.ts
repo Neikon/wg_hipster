@@ -47,9 +47,9 @@ test('al empezar el juego se ocultan los elementos del lobby', async ({ page }) 
   await page.getByRole('button', { name: /Cargar lista/ }).click()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
 
-  // juego: clip + carátula difuminada a pantalla completa, sin elementos de lobby
+  // juego: reproductor propio + carátula difuminada a pantalla completa, sin elementos de lobby
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
-  await expect(page.locator('audio')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reproducir' })).toBeVisible()
   await expect(page.getByAltText('Carátula difuminada')).toBeVisible()
   await expect(page.getByRole('button', { name: /Copiar enlace/ })).toBeHidden()
   await expect(page.getByRole('heading', { name: /Jugadores/ })).toBeHidden()
@@ -88,6 +88,13 @@ test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
     await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
     await page.getByRole('button', { name: /^A\. / }).click()
     await expect(page.getByRole('heading', { name: 'Resultados' })).toBeVisible()
+    if (i === 0) {
+      // ficha completa + carátula a todo ancho + replay del clip
+      await expect(page.locator('img.cover-full')).toBeVisible()
+      await expect(page.getByText('🎵 Título:', { exact: false })).toBeVisible()
+      await expect(page.getByText('🎤 Artista:', { exact: false })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Reproducir' })).toBeVisible()
+    }
     if (i < 4) await page.getByRole('button', { name: 'Siguiente' }).click()
   }
   await page.getByRole('button', { name: 'Siguiente' }).click()

@@ -6,6 +6,7 @@
   import type { ResultadoBusqueda, TipoBusqueda } from './listas'
   import type { HipsterState, HipsterTrack, Dificultad, ModoJuego, Pista } from './types'
   import { pistaTitulo, mostrarAlbum } from './tracks'
+  import Reproductor from '../../../components/Reproductor.svelte'
 
   export let onAction: (a:any)=>void = ()=>{}
 
@@ -276,7 +277,9 @@
     {:else}
       <div class="cover-fallback" aria-hidden="true">🎵</div>
     {/if}
-    <audio controls src={state.clipUrl} style="width:100%;margin-top:1rem" aria-label="Clip musical"></audio>
+    {#key state.clipUrl}
+      <Reproductor src={state.clipUrl} />
+    {/key}
     {#if state.config.modo === 'anio'}
       {#if state.respuestas[room.selfId] !== undefined}
         <p style="margin-top:1rem">Tu respuesta: <strong>{state.respuestas[room.selfId]}</strong> ✓</p>
@@ -319,7 +322,18 @@
   <div class="card {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}">
     <h2>Resultados</h2>
     {#if revelada?.artworkUrl}
-      <img class="cover cover-reveal" src={revelada.artworkUrl} alt="Carátula de {revelada.titulo}" />
+      <img class="cover-full cover-reveal" src={revelada.artworkUrl} alt="Carátula de {revelada.titulo}" />
+    {/if}
+    {#if revelada}
+      <ul class="ficha" aria-label="Ficha de la canción">
+        <li><span class="muted">🎵 Título:</span><strong>{revelada.titulo}</strong></li>
+        <li><span class="muted">🎤 Artista:</span><strong>{revelada.artista}</strong></li>
+        {#if revelada.album}<li><span class="muted">💿 Álbum:</span><strong>{revelada.album}</strong></li>{/if}
+        {#if revelada.anio !== null}<li><span class="muted">📅 Año:</span><strong>{revelada.anio}</strong></li>{/if}
+      </ul>
+      {#key state.clipUrl}
+        <Reproductor src={state.clipUrl} etiqueta="Volver a escuchar el clip" />
+      {/key}
     {/if}
     {#if state.config.modo === 'anio'}
       <p>Año correcto: <strong style="color:var(--success)">{state.respuestaCorrecta}</strong></p>
