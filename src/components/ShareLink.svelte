@@ -21,10 +21,12 @@
     try{ await navigator.clipboard.writeText(link); copied=true; setTimeout(()=>copied=false,1500)}catch{ prompt('Copia el enlace:', link)}
   }
 </script>
-<div class="card" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
-  <input readonly value={link} style="flex:1;min-width:200px" />
-  <button on:click={copy}>{copied ? '¡Copiado!' : 'Copiar enlace'}</button>
-  <button on:click={()=>showQR=!showQR} style="background:var(--muted)">{showQR ? 'Ocultar QR' : 'Ver QR'}</button>
+<div class="card" style="display:grid;gap:0.6rem">
+  <input readonly value={link} aria-label="Enlace de la sala" style="width:100%" />
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <button on:click={copy} style="flex:1;min-width:140px">{copied ? '¡Copiado!' : 'Copiar enlace'}</button>
+    <button on:click={()=>showQR=!showQR} style="flex:1;min-width:140px;background:var(--muted)">{showQR ? 'Ocultar QR' : 'Ver QR'}</button>
+  </div>
 </div>
 {#if showQR && qrUrl}
   <div class="card" style="margin-top:0.6rem;text-align:center">

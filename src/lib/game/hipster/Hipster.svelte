@@ -154,11 +154,11 @@
 </script>
 
 {#if state.phase === 'lobby'}
-  <div class="card">
+  <div class="card" style="text-align:center">
     <h2>🎵 Hipster musical</h2>
     <p class="muted">Escucha el clip y adivina la canción.</p>
     {#if room.isHost}
-      <div style="display:grid;gap:0.8rem;margin:1rem 0;max-width:320px;text-align:left">
+      <div style="display:grid;gap:0.8rem;margin:1rem auto;max-width:320px;text-align:left">
         <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
           Lista
           <select bind:value={listaId} aria-label="Lista de canciones">
@@ -283,8 +283,10 @@
       {#if cargando}
         <button disabled>Cargando música…</button>
       {:else if tracks}
-        <button on:click={start}>Empezar hipster ({tracks.length} rondas)</button>
-        <button on:click={cargar} style="background:var(--muted)">Recargar lista</button>
+        <div style="display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap;margin-top:1rem">
+          <button on:click={start}>Empezar hipster ({tracks.length} rondas)</button>
+          <button on:click={cargar} style="background:var(--muted)">Recargar lista</button>
+        </div>
       {:else if listaId === BUSCAR_ID && !seleccion}
         <p class="muted">Busca y elige un álbum, un artista o una lista para jugar.</p>
       {:else}
@@ -346,7 +348,7 @@
   </div>
 {:else if state.phase === 'resultados'}
   {@const revelada = state.tracks[state.ronda]}
-  <div class="card {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}">
+  <div class="card {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}" style="text-align:center">
     <h2>Resultados</h2>
     {#if revelada?.artworkUrl}
       <img class="cover-full cover-reveal" src={revelada.artworkUrl} alt="Carátula de {revelada.titulo}" />
@@ -367,7 +369,7 @@
     {:else}
       <p>Correcta: <strong style="color:var(--success)">{state.opciones[state.respuestaCorrecta]}</strong></p>
     {/if}
-    <ul>
+    <ul style="text-align:left">
       {#each Object.entries(state.respuestas) as [pid, ansRaw]}
         {@const ans = ansRaw as number}
         {#if state.config.modo === 'anio'}
@@ -380,7 +382,7 @@
       {/each}
     </ul>
     <h3>Puntos</h3>
-    <ul>
+    <ul style="text-align:left">
       {#each Object.entries(state.puntos).sort((a,b)=>b[1]-a[1]) as [pid, pts]}
         <li>{nombre(pid)}: {pts}</li>
       {/each}
@@ -392,9 +394,9 @@
     {/if}
   </div>
 {:else if state.phase === 'final'}
-  <div class="card">
+  <div class="card" style="text-align:center">
     <h2>🏆 Clasificación final</h2>
-    <ol>
+    <ol style="text-align:left;display:inline-block">
       {#each Object.entries(state.puntos).sort((a,b)=>b[1]-a[1]) as [pid, pts]}
         <li>{nombre(pid)} — {pts} pts</li>
       {/each}
