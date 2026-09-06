@@ -85,21 +85,22 @@ input[type='checkbox'], input[type='radio'] {
   overflow-wrap: break-word;
 }
 .container { max-width: 880px; margin: 0 auto; padding: 2rem 1rem }
-/* Tinte dinámico de carátula: tiñe fondo y acentos de la sala con transición */
+/* La sala es UNA sola superficie a pantalla completa (sin tarjetas anidadas) */
 .sala {
-  border-radius: 20px;
+  background: var(--card);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  min-height: calc(100vh - 4rem);
+  min-height: calc(100svh - 4rem);
   transition: background-color 0.4s ease;
 }
 .sala[data-tinte='1'] {
-  background-color: var(--tinte-fondo);
+  background: var(--tinte-fondo);
   padding-left: 1rem;
   padding-right: 1rem;
 }
-/* Con tinte, tarjetas y controles dejan pasar el color (hex calculado en JS,
-   compatible con todos los navegadores; --tinte-card cae a --card si falta) */
-.sala[data-tinte='1'] .card {
-  background: var(--tinte-card, var(--card));
-}
+/* Con tinte, los controles internos dejan pasar el color (hex calculado en
+   JS, compatible con todos los navegadores) */
 .sala[data-tinte='1'] .btn-respuesta,
 .sala[data-tinte='1'] .repro {
   background: var(--tinte-card, var(--card));

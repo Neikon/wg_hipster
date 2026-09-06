@@ -62,8 +62,8 @@ test('en móvil (360px) la ronda no desborda horizontalmente', async ({ page }) 
   await page.getByRole('button', { name: /Cargar lista/ }).click()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
-  // ni el documento ni la tarjeta desbordan (la tarjeta se salía visualmente)
-  for (const sel of ['document.documentElement', '.sala', '.card']) {
+  // ni el documento ni la superficie única desbordan
+  for (const sel of ['document.documentElement', '.sala']) {
     const ok = await page.evaluate(
       (s) => {
         const el = s === 'document.documentElement' ? document.documentElement : document.querySelector(s);
@@ -75,11 +75,11 @@ test('en móvil (360px) la ronda no desborda horizontalmente', async ({ page }) 
   }
   await page.getByRole('button', { name: /^A\. / }).click()
   await expect(page.getByRole('heading', { name: 'Resultados' })).toBeVisible()
-  const cardOk = await page.evaluate(() => {
-    const el = document.querySelector('.card');
+  const salaOk = await page.evaluate(() => {
+    const el = document.querySelector('.sala');
     return el ? el.getBoundingClientRect().right <= window.innerWidth + 1 : false;
   });
-  expect(cardOk).toBe(true);
+  expect(salaOk).toBe(true);
 })
 
 test('títulos largos sin espacios no desbordan la tarjeta', async ({ page }) => {
@@ -118,11 +118,11 @@ test('títulos largos sin espacios no desbordan la tarjeta', async ({ page }) =>
   await expect(page.getByText(/Lista ✓ 5 rondas/)).toBeVisible()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
-  const cardOk = await page.evaluate(() => {
-    const el = document.querySelector('.card');
+  const salaOk = await page.evaluate(() => {
+    const el = document.querySelector('.sala');
     return el ? el.getBoundingClientRect().right <= window.innerWidth + 1 : false;
   });
-  expect(cardOk).toBe(true);
+  expect(salaOk).toBe(true);
 })
 
 test('crear una segunda sala muestra datos limpios de la nueva', async ({ page }) => {
@@ -155,12 +155,12 @@ test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
   await expect(page.getByText('⏱ 30s').first()).toBeVisible()
   for (let i = 0; i < 5; i++) {
     await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
-    // la ronda ocupa el mismo alto que resultados
+    // la superficie única ocupa el mismo alto que resultados
     const medidas = await page.evaluate(() => ({
-      card: document.querySelector('.sala .card')!.getBoundingClientRect().height,
+      sala: document.querySelector('.sala')!.getBoundingClientRect().height,
       viewport: window.innerHeight
     }));
-    expect(medidas.card).toBeGreaterThanOrEqual(medidas.viewport * 0.6);
+    expect(medidas.sala).toBeGreaterThanOrEqual(medidas.viewport * 0.6);
     // tinte dinámico de la carátula activo durante la ronda
     await expect(page.locator('.sala[data-tinte="1"]')).toBeVisible()
     await page.getByRole('button', { name: /^A\. / }).click()
@@ -171,10 +171,10 @@ test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
       await expect(page.getByText('🎵 Título:', { exact: false })).toBeVisible()
       await expect(page.getByText('🎤 Artista:', { exact: false })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Reproducir' })).toBeVisible()
-      // la tarjeta deja pasar el tinte (no es el fondo sólido del tema)
-      const cardBg = await page.evaluate(() => getComputedStyle(document.querySelector('.sala .card')!).backgroundColor);
+      // la superficie deja pasar el tinte (no es el fondo sólido del tema)
+      const salaBg = await page.evaluate(() => getComputedStyle(document.querySelector('.sala')!).backgroundColor);
       const cardVar = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--card').trim());
-      expect(cardBg).not.toContain(cardVar);
+      expect(salaBg).not.toContain(cardVar);
     }
     if (i < 4) await page.getByRole('button', { name: 'Siguiente' }).click()
   }

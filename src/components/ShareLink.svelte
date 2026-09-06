@@ -21,7 +21,7 @@
     try{ await navigator.clipboard.writeText(link); copied=true; setTimeout(()=>copied=false,1500)}catch{ prompt('Copia el enlace:', link)}
   }
 </script>
-<div class="card" style="display:grid;gap:0.6rem">
+<div style="display:grid;gap:0.6rem">
   <input readonly value={link} aria-label="Enlace de la sala" style="width:100%" />
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     <button on:click={copy} style="flex:1;min-width:140px">{copied ? '¡Copiado!' : 'Copiar enlace'}</button>
