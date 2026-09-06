@@ -25,18 +25,18 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `src/lib/net/syncEngine.ts` — `SyncNode`: protocolo P2P (hello+eco/requestState/stateSync/action/rename, heartbeat 2 s, tick 1 s, migración de host); el invitado se incluye desde el inicio, reintenta sync y emite `synced`
 - `src/lib/stores/{roomStore,gameStore}.ts` — `roomStore` (sala/peers/joinOrder/isHost) + `gameStore` (aplica `stateSync` solo si versión mayor)
 - `src/lib/game/{types,registry}.ts` — contrato `GameModule` y registry dinámico por `juegoId`
-- `src/lib/game/hipster/` — juego wg_hipster (modos título/año, dificultad + pistas, charts iTunes + buscador + playlists Deezer por JSONP)
+- `src/lib/game/hipster/` — juego wg_hipster (modos título/año, dificultad + pistas, autoplay, charts iTunes + buscador + playlists Deezer por JSONP)
 - `src/lib/utils/{id,names}.ts` — `generateSalaId` (6 chars), `assignName` (`Jugador N`), `sanitizeName`
 - `vite.config.ts` — `base=VITE_BASE || '/wg_hipster/'`, `server/preview` con `host:true, strictPort:true` (devcontainer)
 - `.devcontainer/devcontainer.json` + `post-create.sh` — imagen `typescript-node:22`, puertos 5173/4173
 - `.github/workflows/pages.yml` — build (`VITE_BASE=/wg_hipster/`) + `deploy-pages@v4`
-- `tests/unit/` — 57 tests (hipster 23, salaN 10 multijugador 2–20, robustez+transporte 6, tema 2, colores 5); `tests/e2e/` — 10 casos, incluido P2P real con dos contextos
+- `tests/unit/` — 61 tests (hipster 24, salaN 10 multijugador 2–20, robustez+transporte 6, tema 2, colores 5); `tests/e2e/` — 15 casos, incluido P2P real con dos contextos
 ## Comandos (Node 22)
 
 ```bash
 npm ci            # instalar (postCreate del devcontainer ya lo hace)
 npm run dev       # http://localhost:5173
-npm run test      # vitest run (57 tests)
+npm run test      # vitest run (61 tests)
 npm run check     # svelte-check + tsc
 npm run build     # dist/ para Pages
 npm run test:e2e  # Playwright; E2E_P2P=1 hace obligatorio el caso de trackers

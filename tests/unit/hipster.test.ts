@@ -26,6 +26,26 @@ describe('hipster engine', () => {
     for (const t of TRACKS) expect(t.previewUrl).toMatch(/^https:\/\//)
   })
 
+  it('autoplayDefault: ON de serie, solo el host lo cambia', () => {
+    const s = createInitialState([{ id: 'host1' }])
+    expect(s.autoplayDefault).toBe(true)
+    // invitado no puede
+    expect(reducer(s, { t: 'setAutoplayDefault', valor: false }, guest)).toBe(s)
+    // host sí, con version+1; repetir valor no versiona
+    const off = reducer(s, { t: 'setAutoplayDefault', valor: false }, host)
+    expect(off.autoplayDefault).toBe(false)
+    expect(off.version).toBe(s.version + 1)
+    expect(reducer(off, { t: 'setAutoplayDefault', valor: false }, host)).toBe(off)
+    // restart lo conserva
+    const jugando = empezar(createInitialState([{ id: 'host1' }]))
+    const apagado = reducer(jugando, { t: 'setAutoplayDefault', valor: false }, host)
+    const re = reducer(reducer(apagado, { t: 'answer', opcion: apagado.respuestaCorrecta }, { isHost: false, peerId: 'host1' }), { t: 'next' }, host)
+    void re
+    const lob = reducer(apagado, { t: 'restart' }, host)
+    expect(lob.phase).toBe('lobby')
+    expect(lob.autoplayDefault).toBe(false)
+  })
+
   it('ignora startGame sin rondas completas', () => {
     const s = createInitialState([{ id: 'host1' }])
     expect(reducer(s, { t: 'startGame', juegoId: 'hipster' }, host)).toBe(s)

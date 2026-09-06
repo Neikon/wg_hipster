@@ -269,6 +269,18 @@
           Segundos por ronda
           <input type="number" min="5" max="300" bind:value={segundos} />
         </label>
+        <label style="display:flex;gap:0.5rem;align-items:center;color:var(--fg);font-size:0.9rem">
+          <input
+            type="checkbox"
+            checked={state.autoplayDefault}
+            disabled={!room.isHost}
+            on:change={(e)=>onAction({ t:'setAutoplayDefault', valor: (e.target as HTMLInputElement).checked })}
+          />
+          Autoplay para todos
+        </label>
+        {#if !room.isHost}
+          <p class="muted" style="font-size:0.85rem">El anfitrión decide el valor inicial; tu botón Auto del reproductor manda en tu móvil.</p>
+        {/if}
       </div>
       {#if tracks}
         <p class="muted">Lista ✓ {tracks.length} rondas con audio{#if descartados} ({descartados} sin audio descartados){/if}</p>
@@ -294,6 +306,7 @@
       {/if}
     {:else}
       <p class="muted">El anfitrión está preparando la música…</p>
+      <p class="muted" style="font-size:0.85rem" aria-label="Autoplay para todos">Autoplay: {state.autoplayDefault ? 'activado' : 'desactivado'} (lo decide el anfitrión)</p>
     {/if}
   </div>
 {:else if state.phase === 'pregunta'}
@@ -306,7 +319,7 @@
       <div class="cover-fallback" aria-hidden="true">🎵</div>
     {/if}
     {#key state.clipUrl}
-      <Reproductor src={state.clipUrl} />
+      <Reproductor src={state.clipUrl} autoplayDefault={state.autoplayDefault} />
     {/key}
     {#if state.config.modo === 'anio'}
       {#if state.respuestas[room.selfId] !== undefined}
@@ -361,7 +374,7 @@
         {#if revelada.anio !== null}<li><span class="muted">📅 Año:</span><strong>{revelada.anio}</strong></li>{/if}
       </ul>
       {#key state.clipUrl}
-        <Reproductor src={state.clipUrl} etiqueta="Volver a escuchar el clip" />
+        <Reproductor src={state.clipUrl} autoplayDefault={state.autoplayDefault} etiqueta="Volver a escuchar el clip" />
       {/key}
     {/if}
     {#if state.config.modo === 'anio'}

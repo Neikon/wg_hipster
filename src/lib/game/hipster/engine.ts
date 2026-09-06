@@ -117,7 +117,8 @@ export function createInitialState(peers: { id: string }[], config: Partial<Hips
     timer: normalized.segundos,
     version: 0,
     gameId: 'hipster',
-    config: normalized
+    config: normalized,
+    autoplayDefault: true
   }
 }
 
@@ -184,6 +185,12 @@ export function reducer(
     }
     return withAnswer
   }
+  if (action.t === 'setAutoplayDefault') {
+    // Solo el host fija el default de la partida; se ignora si viene de invitado.
+    if (!ctx.isHost) return state
+    if (state.autoplayDefault === action.valor) return state
+    return { ...state, autoplayDefault: action.valor, version: state.version + 1 }
+  }
   if (action.t === 'tick') {
     if (!ctx.isHost) return state
     if (state.phase !== 'pregunta') return state
@@ -208,8 +215,9 @@ export function reducer(
   }
   if (action.t === 'restart') {
     if (!ctx.isHost) return state
-    // Rejugar conserva config; las rondas se reinyectan al empezar.
+    // Rejugar conserva config y default de autoplay; las rondas se reinyectan al empezar.
     const restarted = createInitialState(Object.keys(state.puntos).map((id) => ({ id })), state.config)
+    restarted.autoplayDefault = state.autoplayDefault
     return { ...restarted, version: state.version + 1 }
   }
   if (action.t === 'playerJoined') {

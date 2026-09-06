@@ -332,3 +332,53 @@ test('contraste AA del texto de respuesta con tinte', async ({ page }) => {
   });
   expect(ratio).toBeGreaterThanOrEqual(4.5);
 })
+
+test('autoplay: default ON, toggle local y apagado del host', async ({ page }) => {
+  await page.goto('#/sala/aut001?host=1&name=Ana')
+  // lobby: checkbox marcado por defecto
+  const chk = page.getByLabel('Autoplay para todos');
+  await expect(chk).toBeChecked()
+  await page.getByRole('button', { name: /Cargar lista/ }).click()
+  await page.getByRole('button', { name: /Empezar hipster/ }).click()
+  await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+  // reproductor con Auto ON (sigue al host) e intento de reproducción
+  const auto = page.getByRole('button', { name: /Autoplay/ });
+  await expect(auto).toHaveAttribute('aria-pressed', 'true')
+  // override local: apagar solo en este móvil (persiste)
+  await auto.click()
+  await expect(auto).toHaveAttribute('aria-pressed', 'false')
+  const guardado = await page.evaluate(() => localStorage.getItem('wg_hipster:autoplay'));
+  expect(guardado).toBe('0')
+  // volver a encender
+  await auto.click()
+  await expect(auto).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('autoplay: el host lo apaga y el invitado lo ve apagado', async ({ browser }, testInfo) => {
+  test.setTimeout(50_000)
+  const baseURL = testInfo.project.use.baseURL as string
+  const hostContext = await browser.newContext()
+  const guestContext = await browser.newContext()
+  const host = await hostContext.newPage()
+  const guest = await guestContext.newPage()
+  try {
+    await host.goto(`${baseURL}#/`)
+    await host.getByRole('button', { name: /Crear sala/ }).click()
+    const salaId = host.url().match(/#\/sala\/([a-z0-9]{6})/)?.[1]
+    expect(salaId).toBeTruthy()
+    await guest.goto(`${baseURL}#/sala/${salaId}?name=Jugador%202`)
+    try {
+      await expect(host.getByText('Jugador 2')).toBeVisible({ timeout: 15_000 })
+    } catch {
+      test.skip(true, 'Sin trackers P2P aquí; usa E2E_P2P=1 para exigirlo.')
+      return
+    }
+    // el host apaga el autoplay en el lobby y el invitado lo ve apagado
+    await host.getByLabel('Autoplay para todos').click()
+    await expect(host.getByLabel('Autoplay para todos')).not.toBeChecked()
+    await expect(guest.getByText(/Autoplay: desactivado/)).toBeVisible({ timeout: 10_000 })
+  } finally {
+    await hostContext.close()
+    await guestContext.close()
+  }
+})

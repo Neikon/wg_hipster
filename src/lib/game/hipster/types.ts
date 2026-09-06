@@ -39,11 +39,17 @@ export interface HipsterState {
   version: number
   gameId: 'hipster'
   config: HipsterConfig
+  /**
+   * Autoplay por defecto de la partida (sincronizado, solo lo escribe el host).
+   * Cada móvil combina con su decisión local: efectivo = override ?? default.
+   */
+  autoplayDefault: boolean
 }
 
 export type HipsterAction =
   | { t: 'startGame'; juegoId?: 'hipster'; config?: Partial<HipsterConfig>; tracks?: HipsterTrack[]; pool?: HipsterTrack[] }
   | { t: 'answer'; opcion: number }
+  | { t: 'setAutoplayDefault'; valor: boolean }
   | { t: 'tick' }
   | { t: 'next' }
   | { t: 'restart' }
