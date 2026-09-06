@@ -10,6 +10,7 @@
   import PlayerList from '../components/PlayerList.svelte'
   import ShareLink from '../components/ShareLink.svelte'
   import NameInput from '../components/NameInput.svelte'
+  import ThemeToggle from '../components/ThemeToggle.svelte'
   import Game from './Game.svelte'
 
   function genId() { return Math.random().toString(36).slice(2, 9) }
@@ -235,8 +236,8 @@
   {#if gameState.phase === 'lobby'}
     <!-- ============ LOBBY ============ -->
     <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
-      <h2>Sala <code>{salaId}</code> {#if isHost}<span style="background:var(--accent);color:var(--bg);padding:2px 6px;border-radius:4px;font-size:0.7rem">Anfitrión</span>{/if}</h2>
-      <button on:click={salir} style="background:var(--muted)">Salir</button>
+      <h2>Sala <code>{salaId}</code> {#if isHost}<span style="background:var(--accent);color:#fff;padding:2px 6px;border-radius:4px;font-size:0.7rem">Anfitrión</span>{/if}</h2>
+      <span style="display:flex;gap:0.5rem"><ThemeToggle /><button on:click={salir} style="background:var(--muted)">Salir</button></span>
     </div>
 
     <ShareLink {salaId} {juegoId} />

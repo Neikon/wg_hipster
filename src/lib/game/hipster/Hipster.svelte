@@ -245,6 +245,11 @@
       </div>
       {#if tracks}
         <p class="muted">Lista ✓ {tracks.length} rondas con audio{#if descartados} ({descartados} sin audio descartados){/if}</p>
+        <ul class="poster-grid" aria-label="Carátulas de la lista">
+          {#each tracks as t}
+            <li>{#if t.artworkUrl}<img src={t.artworkUrl} alt="" loading="lazy" />{/if}</li>
+          {/each}
+        </ul>
       {:else if cargaError}
         <p style="color:var(--error)">{cargaError}</p>
       {/if}
@@ -263,8 +268,14 @@
     {/if}
   </div>
 {:else if state.phase === 'pregunta'}
-  <div class="card">
+  {@const ronda = state.tracks[state.ronda]}
+  <div class="card {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}">
     <div style="display:flex;justify-content:space-between"><strong>Ronda {state.ronda+1}/{state.tracks.length} · {state.config.modo === 'anio' ? '¿De qué año es?' : '¿Qué canción es?'}</strong><span>⏱ {state.timer}s</span></div>
+    {#if ronda?.artworkUrl}
+      <img class="cover cover-blur" src={ronda.artworkUrl} alt="Carátula difuminada" />
+    {:else}
+      <div class="cover-fallback" aria-hidden="true">🎵</div>
+    {/if}
     <audio controls src={state.clipUrl} style="width:100%;margin-top:1rem" aria-label="Clip musical"></audio>
     {#if state.config.modo === 'anio'}
       {#if state.respuestas[room.selfId] !== undefined}
@@ -304,8 +315,12 @@
     <p class="muted" style="margin-top:0.8rem">{Object.keys(state.respuestas).length}/{peers.length} han respondido</p>
   </div>
 {:else if state.phase === 'resultados'}
-  <div class="card">
+  {@const revelada = state.tracks[state.ronda]}
+  <div class="card {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}">
     <h2>Resultados</h2>
+    {#if revelada?.artworkUrl}
+      <img class="cover cover-reveal" src={revelada.artworkUrl} alt="Carátula de {revelada.titulo}" />
+    {/if}
     {#if state.config.modo === 'anio'}
       <p>Año correcto: <strong style="color:var(--success)">{state.respuestaCorrecta}</strong></p>
     {:else}

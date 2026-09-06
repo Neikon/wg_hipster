@@ -6,6 +6,17 @@ test('landing renderiza y crear sala lleva al lobby', async ({ page }) => {
 
   await page.goto('#/')
   await expect(page.getByRole('heading', { name: /wg_hipster/ })).toBeVisible()
+
+  // toggle de tema claro/oscuro persiste
+  const toggle = page.getByRole('button', { name: /modo (claro|oscuro)/ })
+  const temaIni = await page.evaluate(() => document.documentElement.dataset.theme)
+  const temaAlt = temaIni === 'light' ? 'dark' : 'light'
+  await toggle.click()
+  await expect.poll(async () => page.evaluate(() => document.documentElement.dataset.theme)).toBe(temaAlt)
+  await expect.poll(async () => page.evaluate(() => localStorage.getItem('wg_hipster:tema'))).toBe(temaAlt)
+  await toggle.click()
+  await expect.poll(async () => page.evaluate(() => document.documentElement.dataset.theme)).toBe(temaIni)
+
   await page.getByRole('button', { name: /Crear sala/ }).click()
 
   await expect(page).toHaveURL(/#\/sala\/[A-Za-z0-9]{6}/)
@@ -36,9 +47,10 @@ test('al empezar el juego se ocultan los elementos del lobby', async ({ page }) 
   await page.getByRole('button', { name: /Cargar lista/ }).click()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
 
-  // juego: clip visible a pantalla completa, sin elementos de lobby
+  // juego: clip + carátula difuminada a pantalla completa, sin elementos de lobby
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
   await expect(page.locator('audio')).toBeVisible()
+  await expect(page.getByAltText('Carátula difuminada')).toBeVisible()
   await expect(page.getByRole('button', { name: /Copiar enlace/ })).toBeHidden()
   await expect(page.getByRole('heading', { name: /Jugadores/ })).toBeHidden()
   await expect(page.getByRole('heading', { name: /Cambiar nombre/ })).toBeHidden()

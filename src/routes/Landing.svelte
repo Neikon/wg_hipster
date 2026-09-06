@@ -1,6 +1,7 @@
 <script lang="ts">
   import { generateSalaId } from '../lib/utils/id'
   import { assignName, sanitizeName } from '../lib/utils/names'
+  import ThemeToggle from '../components/ThemeToggle.svelte'
   let name = assignName(1)
   let error=''
   function crear(){
@@ -17,6 +18,7 @@
 </script>
 <div class="container">
   <div class="card" style="text-align:center">
+    <div style="display:flex;justify-content:flex-end"><ThemeToggle /></div>
     <h1>🎉 wg_hipster</h1>
     <p class="muted">Crea una sala, comparte el enlace y juega sin servidor</p>
     <div style="margin:1.5rem 0;display:grid;gap:0.8rem;max-width:360px;margin-left:auto;margin-right:auto">

@@ -1,12 +1,28 @@
-:root {
-  --bg: #0f0e17;
-  --fg: #fffffe;
-  --accent: #ff8906;
-  --accent-hover: #e67e00;
-  --card: #232946;
-  --muted: #a7a9be;
+/* Estilo 3 — Festival póster dual: mismo diseño en claro y oscuro. */
+:root,
+:root[data-theme='dark'] {
+  --bg: #14161f;
+  --fg: #f5f1e8;
+  --accent: #8b5cf6;
+  --accent-hover: #7c3aed;
+  --accent2: #f59e0b;
+  --card: #22262f;
+  --muted: #a8a29e;
   --success: #2cb67d;
   --error: #e45858;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+:root[data-theme='light'] {
+  --bg: #faf6ef;
+  --fg: #1c1917;
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --accent2: #d97706;
+  --card: #ffffff;
+  --muted: #78716c;
+  --success: #15803d;
+  --error: #dc2626;
+  --shadow: 0 8px 24px rgba(28, 25, 23, 0.12);
 }
 * { box-sizing: border-box }
 body {
@@ -18,7 +34,7 @@ body {
 }
 button {
   background: var(--accent);
-  color: var(--bg);
+  color: #fff;
   border: none;
   padding: 0.6rem 1.2rem;
   border-radius: 8px;
@@ -36,9 +52,65 @@ input, select {
 }
 .card {
   background: var(--card);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 1.5rem;
+  box-shadow: var(--shadow);
 }
 .container { max-width: 720px; margin: 0 auto; padding: 2rem 1rem }
-h1,h2 { margin: 0 0 0.5rem }
+h1,h2 { margin: 0 0 0.5rem; letter-spacing: -0.01em }
 .muted { color: var(--muted) }
+
+/* Acento por modo de juego */
+.modo-titulo { --accent: #8b5cf6; --accent-hover: #7c3aed }
+.modo-anio { --accent: #f59e0b; --accent-hover: #d97706 }
+:root[data-theme='light'] .modo-titulo { --accent: #7c3aed; --accent-hover: #6d28d9 }
+:root[data-theme='light'] .modo-anio { --accent: #d97706; --accent-hover: #b45309 }
+
+/* Carátula protagonista */
+.cover {
+  width: min(64vw, 240px);
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  display: block;
+  margin: 1rem auto 0;
+}
+.cover-blur {
+  filter: blur(22px) saturate(1.3);
+  transform: scale(1.04);
+}
+.cover-reveal {
+  animation: reveal 0.6s ease-out;
+}
+@keyframes reveal {
+  from { filter: blur(22px) saturate(1.3); transform: scale(1.04); }
+  to { filter: none; transform: scale(1); }
+}
+.cover-fallback {
+  width: min(64vw, 240px);
+  aspect-ratio: 1;
+  border-radius: 16px;
+  margin: 1rem auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  background: var(--bg);
+  border: 1px dashed var(--muted);
+}
+.poster-grid {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 0.4rem;
+}
+.poster-grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
