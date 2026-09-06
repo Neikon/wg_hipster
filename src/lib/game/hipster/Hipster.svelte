@@ -301,7 +301,7 @@
   <div class="card pantalla-ronda {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}">
     <div style="display:flex;justify-content:space-between;gap:0.5rem;flex-wrap:wrap"><strong style="min-width:0">Ronda {state.ronda+1}/{state.tracks.length} · {state.config.modo === 'anio' ? '¿De qué año es?' : '¿Qué canción es?'}</strong><span style="white-space:nowrap">⏱ {state.timer}s</span></div>
     {#if ronda?.artworkUrl}
-      <img class="cover cover-blur" src={ronda.artworkUrl} alt="Carátula difuminada" />
+      <img class="cover-full cover-blur" src={ronda.artworkUrl} alt="Carátula difuminada" />
     {:else}
       <div class="cover-fallback" aria-hidden="true">🎵</div>
     {/if}
