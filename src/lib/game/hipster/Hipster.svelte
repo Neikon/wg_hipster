@@ -158,7 +158,7 @@
     <h2>🎵 Hipster musical</h2>
     <p class="muted">Escucha el clip y adivina la canción.</p>
     {#if room.isHost}
-      <div style="display:grid;gap:0.8rem;margin:1rem auto;max-width:320px;text-align:left">
+      <div style="display:grid;gap:0.8rem;margin:1rem 0;text-align:left">
         <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
           Lista
           <select bind:value={listaId} aria-label="Lista de canciones">

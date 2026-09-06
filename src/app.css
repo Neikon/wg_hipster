@@ -1,7 +1,7 @@
 /* Estilo 3 — Festival póster dual: mismo diseño en claro y oscuro. */
 :root,
 :root[data-theme='dark'] {
-  --bg: #14161f;
+  color-scheme: dark;  --bg: #14161f;
   --fg: #f5f1e8;
   --accent: #8b5cf6;
   --accent-hover: #7c3aed;
@@ -13,7 +13,7 @@
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
 }
 :root[data-theme='light'] {
-  --bg: #faf6ef;
+  color-scheme: light;  --bg: #faf6ef;
   --fg: #1c1917;
   --accent: #7c3aed;
   --accent-hover: #6d28d9;
@@ -37,20 +37,34 @@ button {
   color: #fff;
   border: none;
   padding: 0.6rem 1.2rem;
+  min-height: 40px;
   border-radius: 999px;
   font-weight: 600;
+  font-size: 1rem;
   cursor: pointer;
   transition: transform 0.08s ease, background-color 0.15s ease;
 }
 button:hover { background: var(--accent-hover) }
 button:active { transform: scale(0.98) }
 button:disabled { opacity: 0.5; cursor: not-allowed }
+/* Densidad estándar M3: controles a todo ancho, 48px de alto, texto 16px (sin zoom en iOS) */
+input:not([type='checkbox']):not([type='radio']):not([type='range']),
+select {
+  width: 100%;
+  min-height: 48px;
+  font-size: 1rem;
+}
 input, select {
   background: var(--card);
   color: var(--fg);
   border: 1px solid var(--muted);
   padding: 0.5rem 0.8rem;
   border-radius: 12px;
+}
+input[type='checkbox'], input[type='radio'] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
 }
 /* Botones de respuesta estilo M3 tonal */
 .btn-respuesta {
@@ -65,7 +79,7 @@ input, select {
   padding: 1.5rem;
   box-shadow: var(--shadow);
 }
-.container { max-width: 720px; margin: 0 auto; padding: 2rem 1rem }
+.container { max-width: 880px; margin: 0 auto; padding: 2rem 1rem }
 /* Tinte dinámico de carátula: tiñe fondo y acentos de la sala con transición */
 .sala {
   border-radius: 20px;
