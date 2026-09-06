@@ -33,6 +33,11 @@
   let salaFull = false
   let toast = ''
   let secondInt: any = null
+  // Conexión: el invitado muestra "Conectando" hasta su primer sync.
+  let synced = false
+  let joinedAt = 0
+  let rejoining = false
+  const REJOIN_MS = 12000
 
   function parseHash(){
     const hash = location.hash // #/sala/abcd12?host=1&name=...
@@ -63,6 +68,34 @@
       showToast(e.msg)
     } else if (e.t === 'salaFull') {
       salaFull = true
+    } else if (e.t === 'synced') {
+      synced = true
+      rejoining = false
+    }
+  }
+
+  function wireTransport(){
+    if (!trystero || !node) return
+    trystero.get((msg:any, peerId:string)=> node?.receive(msg, peerId))
+    trystero.onPeerJoin((id:string)=> node?.peerJoined(id))
+    trystero.onPeerLeave((transportPeerId:string)=> node?.peerLeft(transportPeerId))
+  }
+
+  /** Reconexión: salir y volver a entrar para re-anunciarse en los trackers. */
+  function reconectar(motivo: string){
+    if (!node || rejoining) return
+    rejoining = true
+    showToast(motivo)
+    try { trystero?.leave() } catch {}
+    try {
+      trystero = joinTrystero(salaId)
+      wireTransport()
+      node.start()
+    } catch {
+      showToast('Error conectando P2P')
+    } finally {
+      joinedAt = Date.now()
+      setTimeout(()=>{ rejoining = false }, 3000)
     }
   }
 
@@ -142,19 +175,26 @@
     }
 
     // manejar mensajes
-    trystero.get((msg:any, peerId:string)=> node?.receive(msg, peerId))
-
-    trystero.onPeerJoin((id:string)=> node?.peerJoined(id))
-
-    trystero.onPeerLeave((transportPeerId:string)=> node?.peerLeft(transportPeerId))
+    wireTransport()
 
     // pulso de 1 s para el nodo (tick de juego, heartbeat, reintento de sync)
     startSecondTick()
 
     // el invitado pide estado al entrar; si tarda, el nodo reintenta solo
     node?.start()
+    joinedAt = Date.now()
+
+    // watchdog: invitado sin sincronizar >12 s → re-anunciarse en trackers
+    const watch = setInterval(()=>{
+      if (!node) return
+      const snap = node.snapshot()
+      if (!snap.isHost && !snap.syncedOnce && Date.now() - joinedAt > REJOIN_MS) {
+        reconectar('Conexión lenta, reintentando…')
+      }
+    }, 2000)
 
     return ()=>{
+      clearInterval(watch)
       if (trystero) trystero.leave()
     }
   })
@@ -185,6 +225,12 @@
 <div class="container">
   {#if toast}<div style="background:var(--success);color:var(--bg);padding:0.6rem 1rem;border-radius:8px;margin:1rem 0">{toast}</div>{/if}
   {#if salaFull}<div style="background:var(--error);color:white;padding:0.6rem 1rem;border-radius:8px;margin:1rem 0">Sala llena (20 jugadores)</div>{/if}
+  {#if !isHost && !synced}
+    <div style="background:var(--accent);color:var(--bg);padding:0.6rem 1rem;border-radius:8px;margin:1rem 0;display:flex;gap:0.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <span>Conectando con la sala…{rejoining ? ' reintentando' : ''}</span>
+      <button on:click={()=>reconectar('Reintentando conexión…')} disabled={rejoining} style="background:var(--bg);color:var(--fg);padding:0.3rem 0.7rem;font-size:0.85rem">Reintentar</button>
+    </div>
+  {/if}
 
   {#if gameState.phase === 'lobby'}
     <!-- ============ LOBBY ============ -->

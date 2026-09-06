@@ -1,4 +1,5 @@
 import { joinRoom as trysteroJoin } from 'trystero/torrent'
+import { buildJoinConfig } from './transport'
 
 export interface TrysteroRoom {
   send: (msg: any) => void
@@ -9,7 +10,7 @@ export interface TrysteroRoom {
 }
 
 export function joinTrystero(salaId: string): TrysteroRoom {
-  const config = { appId: 'wg_hipster_v1_' + salaId } as any
+  const config = buildJoinConfig('wg_hipster_v1_' + salaId) as any
   // Trystero torrent strategy usa salaId como roomId
   const room: any = (trysteroJoin as any)(config, salaId)
   const [send, get] = room.makeAction('msg')

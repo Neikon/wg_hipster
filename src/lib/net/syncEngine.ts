@@ -10,6 +10,7 @@ export type SyncEvent =
   | { t: 'game'; state: any }
   | { t: 'toast'; msg: string }
   | { t: 'salaFull' }
+  | { t: 'synced' }
 
 export interface SyncNodeOpts {
   salaId: string
@@ -62,6 +63,8 @@ export class SyncNode {
   private syncedOnce: boolean
   private transportToLogicalPeer = new Map<string, string>()
   private tickCount = 0
+  /** Mensajes redundantes con retardo (en ticks de 1 s): si el primero se pierde, el eco llega. */
+  private delayed: Array<{ msg: any; ticks: number }> = []
   private getGameModule: (id: string) => GameModuleLike | null
   private send: (msg: any) => void
   private emitEv: (e: SyncEvent) => void
@@ -150,6 +153,15 @@ export class SyncNode {
   /** Un tick por segundo (lo llama el componente con setInterval). */
   tickSecond() {
     this.tickCount++
+    // enviar ecos pendientes
+    this.delayed = this.delayed.filter((d) => {
+      d.ticks--
+      if (d.ticks <= 0) {
+        this.send(d.msg)
+        return false
+      }
+      return true
+    })
     if (this.isHost) {
       this.handleAction({ t: 'tick' }, this.selfId)
       // heartbeat stateSync cada 2 s si host
@@ -225,6 +237,7 @@ export class SyncNode {
         this.gameState = msg.fullState
         this.emitEv({ t: 'game', state: this.gameState })
       }
+      if (!this.syncedOnce) this.emitEv({ t: 'synced' })
       this.syncedOnce = true
       // actualizar room peers/host
       if (msg.peers) {
@@ -256,9 +269,11 @@ export class SyncNode {
   }
 
   peerJoined(transportPeerId: string) {
-    // enviar hello
+    // enviar hello (+ eco a los 2 s por si el primero se pierde)
     const selfName = this.peers.find((p) => p.id === this.selfId)?.name || this.selfName
-    this.send({ t: 'hello', peerId: this.selfId, name: selfName, joinTime: this.now() })
+    const hello = { t: 'hello', peerId: this.selfId, name: selfName, joinTime: this.now() }
+    this.send(hello)
+    this.delayed.push({ msg: { ...hello }, ticks: 2 })
     // invitado aún sin sincronizar: pedir estado al aparecer un peer
     if (!this.isHost && !this.syncedOnce) {
       this.send({ t: 'requestState', from: this.selfId })

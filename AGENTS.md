@@ -19,8 +19,8 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `src/App.svelte`, `src/main.ts` — entrada + router hash (`#/` → Landing, `#/sala/<id>` → Room)
 - `src/routes/{Landing,Room,Game}.svelte` — páginas; `Room.svelte` contiene la lógica P2P agnóstica al juego (hello/requestState/stateSync/action/rename, heartbeat 2 s, tick host 1 s, `electNewHost`; un solo juego)
 - `src/components/{PlayerList,ShareLink,NameInput}.svelte` — UI lobby
-- `src/lib/net/{types,trysteroAdapter,room}.ts` — `Msg`, adapter Trystero (`appId='wg_hipster_v1_'+salaId`), `electNewHost`/`isRoomFull`
-- `src/lib/net/syncEngine.ts` — `SyncNode`: protocolo P2P (hello/requestState/stateSync/action/rename, heartbeat 2 s, tick 1 s, migración de host); el invitado se incluye desde el inicio y reintenta sync hasta converger
+- `src/lib/net/{types,trysteroAdapter,room,transport}.ts` — `Msg`, adapter Trystero (`appId='wg_hipster_v1_'+salaId`, 6 trackers, 5 STUN), `electNewHost`/`isRoomFull`
+- `src/lib/net/syncEngine.ts` — `SyncNode`: protocolo P2P (hello+eco/requestState/stateSync/action/rename, heartbeat 2 s, tick 1 s, migración de host); el invitado se incluye desde el inicio, reintenta sync y emite `synced`
 - `src/lib/stores/{roomStore,gameStore}.ts` — `roomStore` (sala/peers/joinOrder/isHost) + `gameStore` (aplica `stateSync` solo si versión mayor)
 - `src/lib/game/{types,registry}.ts` — contrato `GameModule` y registry dinámico por `juegoId`
 - `src/lib/game/hipster/` — juego wg_hipster (modos título/año, dificultad + pistas, charts iTunes + buscador + playlists Deezer por JSONP)
@@ -28,14 +28,14 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `vite.config.ts` — `base=VITE_BASE || '/wg_hipster/'`, `server/preview` con `host:true, strictPort:true` (devcontainer)
 - `.devcontainer/devcontainer.json` + `post-create.sh` — imagen `typescript-node:22`, puertos 5173/4173
 - `.github/workflows/pages.yml` — build (`VITE_BASE=/wg_hipster/`) + `deploy-pages@v4`
-- `tests/unit/` — 44 tests (hipster 23, salaN 10 multijugador 2–20); `tests/e2e/` — 10 casos, incluido P2P real con dos contextos
+- `tests/unit/` — 50 tests (hipster 23, salaN 10 multijugador 2–20, robustez+transporte 6); `tests/e2e/` — 10 casos, incluido P2P real con dos contextos
 
 ## Comandos (Node 22)
 
 ```bash
 npm ci            # instalar (postCreate del devcontainer ya lo hace)
 npm run dev       # http://localhost:5173
-npm run test      # vitest run (44 tests)
+npm run test      # vitest run (50 tests)
 npm run check     # svelte-check + tsc
 npm run build     # dist/ para Pages
 npm run test:e2e  # Playwright; E2E_P2P=1 hace obligatorio el caso de trackers
