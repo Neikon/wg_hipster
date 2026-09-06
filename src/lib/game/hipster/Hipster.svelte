@@ -290,7 +290,7 @@
       {:else if listaId === BUSCAR_ID && !seleccion}
         <p class="muted">Busca y elige un álbum, un artista o una lista para jugar.</p>
       {:else}
-        <button on:click={cargar}>Cargar lista</button>
+        <button on:click={cargar} style="width:100%">Cargar lista</button>
       {/if}
     {:else}
       <p class="muted">El anfitrión está preparando la música…</p>
@@ -402,7 +402,7 @@
       {/each}
     </ol>
     {#if room.isHost}
-      <button on:click={restart}>Volver al lobby</button>
+      <button on:click={restart} style="width:100%">Volver al lobby</button>
     {/if}
   </div>
 {/if}
