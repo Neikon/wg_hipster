@@ -1,5 +1,5 @@
 <script lang="ts">
-  import qrcode from 'qrcode-generator'
+  import { qrParaSala } from '../lib/utils/qr'
   import { DEFAULT_GAME_ID } from '../lib/game/registry'
   export let salaId: string
   export let juegoId: string = DEFAULT_GAME_ID
@@ -11,12 +11,7 @@
   $: link = typeof location !== 'undefined'
     ? `${location.origin}${location.pathname}#/sala/${salaId}${suffix}`
     : ''
-  $: qrUrl = (()=>{ try {
-    const qr = qrcode(0, 'M')
-    qr.addData(link)
-    qr.make()
-    return qr.createDataURL(8, 0)
-  } catch { return '' } })()
+  $: qrUrl = qrParaSala(link)
   async function copy(){
     try{ await navigator.clipboard.writeText(link); copied=true; setTimeout(()=>copied=false,1500)}catch{ prompt('Copia el enlace:', link)}
   }
