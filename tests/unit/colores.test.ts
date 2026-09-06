@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   rgbAHex,
   hexARgb,
+  parseColor,
+  mezclarHex,
   luminancia,
   ratioContraste,
   asegurarContraste,
@@ -12,6 +14,14 @@ describe('color dinámico', () => {
   it('hex/rgb redondos', () => {
     expect(rgbAHex({ r: 255, g: 0, b: 16 })).toBe('#ff0010')
     expect(hexARgb('#ff0010')).toEqual({ r: 255, g: 0, b: 16 })
+  })
+
+  it('parseColor y mezclarHex', () => {
+    expect(parseColor('#fff')).toEqual({ r: 255, g: 255, b: 255 })
+    expect(parseColor('rgb(10, 20, 30)')).toEqual({ r: 10, g: 20, b: 30 })
+    expect(parseColor('rgba(10, 20, 30, 0.5)')).toEqual({ r: 10, g: 20, b: 30 })
+    expect(mezclarHex('#000000', '#ffffff', 0.5)).toBe('#808080')
+    expect(mezclarHex('#ff0000', '#0000ff', 0)).toBe('#ff0000')
   })
 
   it('ratios WCAG conocidos', () => {

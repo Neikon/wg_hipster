@@ -95,14 +95,19 @@ input[type='checkbox'], input[type='radio'] {
   padding-left: 1rem;
   padding-right: 1rem;
 }
-/* Con tinte, tarjetas y controles dejan pasar el color (navegadores sin
-   color-mix ignoran la regla y siguen con el fondo sólido) */
+/* Con tinte, tarjetas y controles dejan pasar el color (hex calculado en JS,
+   compatible con todos los navegadores; --tinte-card cae a --card si falta) */
 .sala[data-tinte='1'] .card {
-  background: color-mix(in srgb, var(--card) 68%, transparent);
+  background: var(--tinte-card, var(--card));
 }
 .sala[data-tinte='1'] .btn-respuesta,
 .sala[data-tinte='1'] .repro {
-  background: color-mix(in srgb, var(--card) 55%, transparent);
+  background: var(--tinte-card, var(--card));
+}
+/* La ronda ocupa el mismo alto que resultados */
+.pantalla-ronda {
+  min-height: 70vh;
+  min-height: 70svh;
 }
 /* Texto sobre el acento teñido (contraste AA garantizado) */
 .sala[data-tinte='1'] .repro-btn,

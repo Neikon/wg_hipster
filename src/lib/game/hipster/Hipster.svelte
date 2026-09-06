@@ -298,7 +298,7 @@
   </div>
 {:else if state.phase === 'pregunta'}
   {@const ronda = state.tracks[state.ronda]}
-  <div class="card {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}">
+  <div class="card pantalla-ronda {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}">
     <div style="display:flex;justify-content:space-between;gap:0.5rem;flex-wrap:wrap"><strong style="min-width:0">Ronda {state.ronda+1}/{state.tracks.length} · {state.config.modo === 'anio' ? '¿De qué año es?' : '¿Qué canción es?'}</strong><span style="white-space:nowrap">⏱ {state.timer}s</span></div>
     {#if ronda?.artworkUrl}
       <img class="cover cover-blur" src={ronda.artworkUrl} alt="Carátula difuminada" />
@@ -348,7 +348,7 @@
   </div>
 {:else if state.phase === 'resultados'}
   {@const revelada = state.tracks[state.ronda]}
-  <div class="card {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}" style="text-align:center">
+  <div class="card pantalla-ronda {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}" style="text-align:center">
     <h2>Resultados</h2>
     {#if revelada?.artworkUrl}
       <img class="cover-full cover-reveal" src={revelada.artworkUrl} alt="Carátula de {revelada.titulo}" />

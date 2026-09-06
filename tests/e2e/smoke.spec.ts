@@ -155,6 +155,12 @@ test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
   await expect(page.getByText('⏱ 30s').first()).toBeVisible()
   for (let i = 0; i < 5; i++) {
     await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+    // la ronda ocupa el mismo alto que resultados
+    const medidas = await page.evaluate(() => ({
+      card: document.querySelector('.sala .card')!.getBoundingClientRect().height,
+      viewport: window.innerHeight
+    }));
+    expect(medidas.card).toBeGreaterThanOrEqual(medidas.viewport * 0.6);
     // tinte dinámico de la carátula activo durante la ronda
     await expect(page.locator('.sala[data-tinte="1"]')).toBeVisible()
     await page.getByRole('button', { name: /^A\. / }).click()

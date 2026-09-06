@@ -195,3 +195,27 @@ export async function tinteDeCaratula(
 export function limpiarCacheTinte() {
   cache.clear()
 }
+
+function componenteAHex(n: number): string {
+  return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
+}
+
+/** Acepta #rgb, #rrggbb, rgb() y rgba() (ignora alfa). */
+export function parseColor(s: string): RGB {
+  const t = s.trim().toLowerCase()
+  if (t.startsWith('#')) return hexARgb(t)
+  const m = t.match(/rgba?\(([^)]+)\)/)
+  if (m) {
+    const [r, g, b] = m[1].split(',').slice(0, 3).map((x) => Number(x.trim()))
+    if ([r, g, b].every(Number.isFinite)) return { r, g, b }
+  }
+  return { r: 128, g: 128, b: 128 }
+}
+
+/** Mezcla dos colores cualesquiera (hex o rgb()) y devuelve hex. */
+export function mezclarHex(a: string, b: string, t: number): string {
+  const ca = parseColor(a)
+  const cb = parseColor(b)
+  const k = Math.max(0, Math.min(1, t))
+  return `#${componenteAHex(ca.r + (cb.r - ca.r) * k)}${componenteAHex(ca.g + (cb.g - ca.g) * k)}${componenteAHex(ca.b + (cb.b - ca.b) * k)}`
+}
