@@ -111,9 +111,13 @@ input[type='checkbox'], input[type='radio'] {
   min-height: 70svh;
 }
 /* Texto sobre el acento teñido (contraste AA garantizado) */
-.sala[data-tinte='1'] .repro-btn,
-.sala[data-tinte='1'] .btn-respuesta {
+.sala[data-tinte='1'] .repro-btn {
   color: var(--tinte-texto);
+}
+/* Texto sobre la tarjeta teñida: OTRO color, calculado contra su fondo */
+.sala[data-tinte='1'] .btn-respuesta,
+.sala[data-tinte='1'] .repro-tiempo {
+  color: var(--tinte-texto-tarjeta, var(--fg));
 }
 h1,h2 { margin: 0 0 0.5rem; letter-spacing: -0.01em }
 .muted { color: var(--muted) }

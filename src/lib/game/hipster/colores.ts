@@ -219,3 +219,16 @@ export function mezclarHex(a: string, b: string, t: number): string {
   const k = Math.max(0, Math.min(1, t))
   return `#${componenteAHex(ca.r + (cb.r - ca.r) * k)}${componenteAHex(ca.g + (cb.g - ca.g) * k)}${componenteAHex(ca.b + (cb.b - ca.b) * k)}`
 }
+
+/**
+ * Texto para un fondo dado (hex o rgb()): blanco o negro, el que dé más
+ * contraste, ajustado hasta el mínimo WCAG. Cada superficie teñida necesita
+ * el suyo: el del acento no vale para la tarjeta y viceversa.
+ */
+export function textoSobre(fondoHex: string, min = 4.5): string {
+  const fondo = parseColor(fondoHex)
+  const blanco: RGB = { r: 255, g: 255, b: 255 }
+  const negro: RGB = { r: 0, g: 0, b: 0 }
+  const base = ratioContraste(blanco, fondo) >= ratioContraste(negro, fondo) ? blanco : negro
+  return rgbAHex(asegurarContraste(base, fondo, min))
+}

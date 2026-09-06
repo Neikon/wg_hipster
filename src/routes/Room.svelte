@@ -14,7 +14,7 @@
   import Game from './Game.svelte'
   import { tinteActual } from '../lib/game/hipster/colores'
   import type { Tinte } from '../lib/game/hipster/colores'
-  import { mezclarHex } from '../lib/game/hipster/colores'
+  import { mezclarHex, textoSobre } from '../lib/game/hipster/colores'
 
   function genId() { return Math.random().toString(36).slice(2, 9) }
 
@@ -229,14 +229,19 @@
 
   let tinte: Tinte | null = null
   let tinteCard = ''
+  let tinteTextoTarjeta = ''
   const unsubTinte = tinteActual.subscribe((t)=> {
     tinte = t
-    // --tinte-card se calcula en JS (hex) para que funcione en cualquier navegador
+    // --tinte-card y su texto se calculan en JS (hex) para que funcionen
+    // en cualquier navegador. OJO: el texto de las respuestas va contra la
+    // tarjeta, NO contra el acento (cada superficie lleva el suyo).
     if (t) {
       const base = getComputedStyle(document.documentElement).getPropertyValue('--card').trim() || '#22262f'
       tinteCard = mezclarHex(t.fondo, base, 0.45)
+      tinteTextoTarjeta = textoSobre(tinteCard)
     } else {
       tinteCard = ''
+      tinteTextoTarjeta = ''
     }
   })
 </script>
@@ -245,7 +250,7 @@
   class="container sala"
   data-tinte={tinte ? '1' : '0'}
   style={tinte
-    ? `--tinte-fondo:${tinte.fondo};--tinte-card:${tinteCard};--accent:${tinte.acento};--accent-hover:${tinte.acento};--tinte-texto:${tinte.sobreAcento}`
+    ? `--tinte-fondo:${tinte.fondo};--tinte-card:${tinteCard};--tinte-texto-tarjeta:${tinteTextoTarjeta};--accent:${tinte.acento};--accent-hover:${tinte.acento};--tinte-texto:${tinte.sobreAcento}`
     : ''}
 >
   {#if toast}<div style="background:var(--success);color:var(--bg);padding:0.6rem 1rem;border-radius:8px;margin:1rem 0">{toast}</div>{/if}

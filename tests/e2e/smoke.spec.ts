@@ -307,3 +307,28 @@ test('pistas: selección múltiple muestra la info elegida', async ({ page }) =>
   await expect(page.getByText(/🎤 Artista:/)).toBeHidden()
   await expect(page.getByText(/🔤 Título:/)).toBeHidden()
 })
+
+test('contraste AA del texto de respuesta con tinte', async ({ page }) => {
+  await page.goto('#/sala/con001?host=1&name=Ana')
+  await page.getByRole('button', { name: /Cargar lista/ }).click()
+  await page.getByRole('button', { name: /Empezar hipster/ }).click()
+  await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+  await expect(page.locator('.sala[data-tinte="1"]')).toBeVisible()
+  // ratio real medido en el navegador (WCAG AA: 4.5)
+  const ratio = await page.evaluate(() => {
+    const btn = document.querySelector('.sala .btn-respuesta') as HTMLElement;
+    const cs = getComputedStyle(btn);
+    const lum = (s: string) => {
+      const [r, g, b] = s.match(/[\d.]+/g)!.slice(0, 3).map(Number).map((c) => {
+        const v = c / 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const l1 = lum(cs.color);
+    const l2 = lum(cs.backgroundColor);
+    const [cl, os] = l1 >= l2 ? [l1, l2] : [l2, l1];
+    return (cl + 0.05) / (os + 0.05);
+  });
+  expect(ratio).toBeGreaterThanOrEqual(4.5);
+})
