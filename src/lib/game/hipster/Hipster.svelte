@@ -388,7 +388,7 @@
       {/each}
     </ul>
     {#if room.isHost}
-      <button on:click={next}>Siguiente</button>
+      <button on:click={next} style="width:100%">Siguiente</button>
     {:else}
       <p class="muted">Esperando anfitrión...</p>
     {/if}
