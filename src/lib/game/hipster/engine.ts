@@ -230,5 +230,26 @@ export function reducer(
     if (!ctx.isHost || state.puntos[action.peerId] !== undefined) return state
     return { ...state, puntos: { ...state.puntos, [action.peerId]: 0 }, version: state.version + 1 }
   }
+  if (action.t === 'playerLeft') {
+    // Solo el host: saca al que se fue para no bloquear el "todos han respondido".
+    if (!ctx.isHost) return state
+    if (state.puntos[action.peerId] === undefined && state.respuestas[action.peerId] === undefined) {
+      return state
+    }
+    const puntos = { ...state.puntos }
+    const respuestas = { ...state.respuestas }
+    delete puntos[action.peerId]
+    delete respuestas[action.peerId]
+    const sinEl = { ...state, puntos, respuestas, version: state.version + 1 }
+    // si con su salida ya están todos, cerrar la ronda sin esperar al timer
+    if (
+      sinEl.phase === 'pregunta' &&
+      Object.keys(sinEl.puntos).length > 0 &&
+      Object.keys(sinEl.puntos).every((pid) => sinEl.respuestas[pid] !== undefined)
+    ) {
+      return toResultados(sinEl)
+    }
+    return sinEl
+  }
   return state
 }

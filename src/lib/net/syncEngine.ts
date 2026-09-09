@@ -65,6 +65,13 @@ export class SyncNode {
   private tickCount = 0
   /** Mensajes redundantes con retardo (en ticks de 1 s): si el primero se pierde, el eco llega. */
   private delayed: Array<{ msg: any; ticks: number }> = []
+  /**
+   * Respuesta propia pendiente de confirmación (solo invitados): si el host
+   * no la refleja, se reenvía cada 2 s hasta 30 veces. Sin esto, una respuesta
+   * perdida deja la ronda esperando al temporizador.
+   */
+  private pendingAnswer: { opcion: number; ronda: number; reintentos: number } | null = null
+  private static readonly MAX_REINTENTOS = 30
   private getGameModule: (id: string) => GameModuleLike | null
   private send: (msg: any) => void
   private emitEv: (e: SyncEvent) => void
@@ -170,6 +177,21 @@ export class SyncNode {
       // invitado aún sin sincronizar: reintentar hasta que llegue el primer sync
       this.send({ t: 'requestState', from: this.selfId })
     }
+    // reenviar respuesta propia si el host aún no la refleja
+    if (!this.isHost && this.pendingAnswer && this.tickCount % 2 === 0) {
+      const p = this.pendingAnswer
+      const mias = this.gameState?.respuestas?.[this.selfId]
+      const rondaActual = this.gameState?.ronda
+      const enPregunta = this.gameState?.phase === 'pregunta'
+      if (!enPregunta || rondaActual !== p.ronda || mias !== undefined) {
+        this.pendingAnswer = null
+      } else if (p.reintentos < SyncNode.MAX_REINTENTOS) {
+        p.reintentos++
+        this.send({ t: 'action', juegoId: this.juegoId, action: { t: 'answer', opcion: p.opcion }, from: this.selfId })
+      } else {
+        this.pendingAnswer = null
+      }
+    }
   }
 
   /** Acción de juego originada en la UI local. */
@@ -179,6 +201,9 @@ export class SyncNode {
       this.handleAction(action, this.selfId)
     } else {
       this.send({ t: 'action', juegoId: this.juegoId, action, from: this.selfId })
+      if (action.t === 'answer') {
+        this.pendingAnswer = { opcion: action.opcion, ronda: this.gameState?.ronda ?? -1, reintentos: 0 }
+      }
     }
   }
 
@@ -289,6 +314,10 @@ export class SyncNode {
     // joinOrder se mantiene para elección determinista, pero connected set cambia
     const connected = new Set(this.peers.map((p) => p.id))
     this.emitRoom()
+    // el que se fue no debe bloquear el "todos han respondido"
+    if (this.isHost && id !== this.selfId) {
+      this.handleAction({ t: 'playerLeft', peerId: id }, this.selfId)
+    }
     if (wasHost) {
       const newHost = electNewHost(this.joinOrder, connected)
       if (newHost) {

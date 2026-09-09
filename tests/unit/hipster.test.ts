@@ -46,6 +46,22 @@ describe('hipster engine', () => {
     expect(lob.autoplayDefault).toBe(false)
   })
 
+  it('playerLeft saca al que se fue y cierra la ronda si ya están todos', () => {
+    const s = empezar(createInitialState([{ id: 'host1' }, { id: 'a' }, { id: 'b' }]))
+    // solo invitados: el host ignora playerLeft de invitados
+    expect(reducer(s, { t: 'playerLeft', peerId: 'b' }, { isHost: false, peerId: 'a' })).toBe(s)
+    // responde 'a'; 'b' abandona; responde el host → resultados sin esperar
+    let cur = reducer(s, { t: 'answer', opcion: s.respuestaCorrecta }, { isHost: false, peerId: 'a' })
+    expect(cur.phase).toBe('pregunta')
+    cur = reducer(cur, { t: 'playerLeft', peerId: 'b' }, host)
+    expect(cur.puntos['b']).toBeUndefined()
+    expect(cur.phase).toBe('pregunta')
+    cur = reducer(cur, { t: 'answer', opcion: cur.respuestaCorrecta }, { isHost: true, peerId: 'host1' })
+    expect(cur.phase).toBe('resultados')
+    // desconocido no versiona
+    expect(reducer(cur, { t: 'playerLeft', peerId: 'fantasma' }, host)).toBe(cur)
+  })
+
   it('ignora startGame sin rondas completas', () => {
     const s = createInitialState([{ id: 'host1' }])
     expect(reducer(s, { t: 'startGame', juegoId: 'hipster' }, host)).toBe(s)

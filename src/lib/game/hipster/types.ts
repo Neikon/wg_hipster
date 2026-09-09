@@ -54,3 +54,4 @@ export type HipsterAction =
   | { t: 'next' }
   | { t: 'restart' }
   | { t: 'playerJoined'; peerId: string }
+  | { t: 'playerLeft'; peerId: string }

@@ -49,7 +49,7 @@ test('al empezar el juego se ocultan los elementos del lobby', async ({ page }) 
 
   // juego: reproductor propio + carátula difuminada a pantalla completa, sin elementos de lobby
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Reproducir' })).toBeVisible()
+  await expect(page.locator('.repro-btn')).toBeVisible()
   await expect(page.getByAltText('Carátula difuminada')).toBeVisible()
   await expect(page.getByRole('button', { name: /Copiar enlace/ })).toBeHidden()
   await expect(page.getByRole('heading', { name: /Jugadores/ })).toBeHidden()
