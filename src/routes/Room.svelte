@@ -3,7 +3,7 @@
   import { roomStore, initRoom } from '../lib/stores/roomStore'
   import { gameStore } from '../lib/stores/gameStore'
   import { assignName, sanitizeName } from '../lib/utils/names'
-  import { joinTrystero } from '../lib/net/trysteroAdapter'
+  import { joinTrystero, relayStatus } from '../lib/net/trysteroAdapter'
   import { SyncNode } from '../lib/net/syncEngine'
   import type { SyncEvent } from '../lib/net/syncEngine'
   import { DEFAULT_GAME_ID, getGameModule } from '../lib/game/registry'
@@ -42,6 +42,17 @@
   let joinedAt = 0
   let rejoining = false
   const REJOIN_MS = 12000
+  // Señalización (trackers): X de Y sockets abiertos. Con 0 abiertos la sala
+  // es fantasma —la malla de datos vive pero nadie nuevo puede entrar—.
+  let relaysAbiertos = 0
+  let relaysTotal = 0
+  function actualizarRelays(){
+    try {
+      const st = relayStatus()
+      relaysTotal = st.length
+      relaysAbiertos = st.filter((s)=>s.open).length
+    } catch { /* sin red: se reintenta en el siguiente tick */ }
+  }
 
   function parseHash(){
     const hash = location.hash // #/sala/abcd12?host=1&name=...
@@ -109,6 +120,7 @@
     // heartbeat cada 2 s, reintento de sync si invitado sin sincronizar).
     secondInt = setInterval(()=>{
       node?.tickSecond()
+      actualizarRelays()
     }, 1000)
   }
 
@@ -187,13 +199,18 @@
     // el invitado pide estado al entrar; si tarda, el nodo reintenta solo
     node?.start()
     joinedAt = Date.now()
+    actualizarRelays()
 
     // watchdog: invitado sin sincronizar >12 s → re-anunciarse en trackers
+    // (la reconexión crea sockets nuevos y resetea el backoff de Trystero).
+    // Si además no hay ningún tracker abierto, no se esperan los 12 s.
     const watch = setInterval(()=>{
       if (!node) return
       const snap = node.snapshot()
       if (!snap.isHost && !snap.syncedOnce && Date.now() - joinedAt > REJOIN_MS) {
         reconectar('Conexión lenta, reintentando…')
+      } else if (!snap.isHost && !snap.syncedOnce && relaysTotal > 0 && relaysAbiertos === 0 && Date.now() - joinedAt > 5000) {
+        reconectar('Sin señalización, reintentando…')
       }
     }, 2000)
 
@@ -270,6 +287,16 @@
     </div>
 
     <ShareLink {salaId} {juegoId} />
+
+    {#if relaysTotal > 0}
+      <p class="muted" style="font-size:0.8rem;margin:0.4rem 0 0">Señalización: {relaysAbiertos}/{relaysTotal} trackers</p>
+    {/if}
+    {#if isHost && relaysTotal > 0 && relaysAbiertos === 0}
+      <div style="background:var(--error);color:white;padding:0.6rem 1rem;border-radius:8px;margin:0.6rem 0;display:flex;gap:0.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
+        <span>Sin conexión con los trackers: ningún jugador nuevo puede entrar. Recarga la página para re-anunciar la sala.</span>
+        <button on:click={()=>location.reload()} style="background:white;color:var(--error);padding:0.3rem 0.7rem;font-size:0.85rem">Recargar</button>
+      </div>
+    {/if}
   {:else}
     <!-- ============ JUEGO ============ -->
     <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.8rem">

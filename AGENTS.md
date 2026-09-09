@@ -17,11 +17,11 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 ## Mapa de código
 
 - `src/App.svelte`, `src/main.ts` — entrada + router hash (`#/` → Landing, `#/sala/<id>` → Room)
-- `src/routes/{Landing,Room,Game}.svelte` — páginas; `Room.svelte` contiene la lógica P2P agnóstica al juego (hello/requestState/stateSync/action/rename, heartbeat 2 s, tick host 1 s, `electNewHost`; un solo juego)
+- `src/routes/{Landing,Room,Game}.svelte` — páginas; `Room.svelte` contiene la lógica P2P agnóstica al juego (hello/requestState/stateSync/action/rename, heartbeat 2 s, tick host 1 s, `electNewHost`; un solo juego) + vigía de señalización (línea `Señalización X/Y`, aviso fantasma al host con recarga, rejoin rápido del invitado si 0 trackers)
 - `src/components/{PlayerList,ShareLink,NameInput}.svelte` — UI lobby
 - `src/app.css` + `src/lib/stores/theme.ts` + `src/components/ThemeToggle.svelte` — estilo festival póster dual (claro/oscuro según sistema + toggle persistido)
 - `src/lib/game/hipster/colores.ts` — color dinámico de carátula (Canvas + contraste WCAG AA, store `tinteActual`)
-- `src/lib/net/{types,trysteroAdapter,room,transport}.ts` — `Msg`, adapter Trystero (`appId='wg_hipster_v1_'+salaId`, 6 trackers, 5 STUN), `electNewHost`/`isRoomFull`
+- `src/lib/net/{types,trysteroAdapter,room,transport}.ts` — `Msg`, adapter Trystero (`appId='wg_hipster_v1_'+salaId`, 4 trackers verificados 2026-09-09, 5 STUN), `electNewHost`/`isRoomFull`, `relayStatus()` (sockets trackers); hooks solo-e2e vía query del hash: `transport.trackerUrls()` acepta `?tracker=ws://…` (repetible) y el adapter `?lagMs=&lossPct=` (móvil lento simulado)
 - `src/lib/net/syncEngine.ts` — `SyncNode`: protocolo P2P (hello+eco/requestState/stateSync/action/rename, heartbeat 2 s, tick 1 s, migración de host); el invitado se incluye desde el inicio, reintenta sync y emite `synced`
 - `src/lib/stores/{roomStore,gameStore}.ts` — `roomStore` (sala/peers/joinOrder/isHost) + `gameStore` (aplica `stateSync` solo si versión mayor)
 - `src/lib/game/{types,registry}.ts` — contrato `GameModule` y registry dinámico por `juegoId`
@@ -30,13 +30,13 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `vite.config.ts` — `base=VITE_BASE || '/wg_hipster/'`, `server/preview` con `host:true, strictPort:true` (devcontainer)
 - `.devcontainer/devcontainer.json` + `post-create.sh` — imagen `typescript-node:22`, puertos 5173/4173
 - `.github/workflows/pages.yml` — build (`VITE_BASE=/wg_hipster/`) + `deploy-pages@v4`
-- `tests/unit/` — 69 tests (hipster 25, salaN 10, rondaRobusta 3, robustez+transporte 6, tema 2, colores 6, qr 2); `tests/e2e/` — 15 casos, incluido P2P real con dos contextos
+- `tests/unit/` — 70 tests (hipster 25, salaN 10, rondaRobusta 3, robustez+transporte 6+1, tema 2, colores 6, qr 2); `tests/e2e/` — 21 casos: P2P real 2 contextos + `multijugador.spec.ts` (salas P2P reales 5/10/15/20 escalonado + 15 en ráfaga + 8 con mitad lenta vía tracker local `bittorrent-tracker` devDep, con aserción `Señalización: 1/1`; `E2E_PUBLIC` usa trackers de producción bajo demanda; vars `E2E_PEERS`, `E2E_BURST`, `E2E_SLOW`, `E2E_PUBLIC`, `E2E_JOIN_GAP_MS`, `E2E_CONVERGE_MS`, `E2E_LAG_MS`, `E2E_LOSS_PCT`, `E2E_SLOW_HOST`; nota: 3 de los 6 trackers públicos fallan —btorrent.xyz, webtorrent.io, files.fm— y la redundancia lo absorbe)
 ## Comandos (Node 22)
 
 ```bash
 npm ci            # instalar (postCreate del devcontainer ya lo hace)
 npm run dev       # http://localhost:5173
-npm run test      # vitest run (69 tests)
+npm run test      # vitest run (70 tests)
 npm run check     # svelte-check + tsc
 npm run build     # dist/ para Pages
 npm run test:e2e  # Playwright; E2E_P2P=1 hace obligatorio el caso de trackers
