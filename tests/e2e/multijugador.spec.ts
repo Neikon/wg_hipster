@@ -23,12 +23,16 @@ import { Server as TrackerServer } from 'bittorrent-tracker'
  * - público: como el escalonado pero contra los trackers públicos de
  *   producción (sin `?tracker=`). Solo bajo demanda: lento y dependiente
  *   de internet, pero es el camino de señalización 100 % real.
+ * - envejecido: la sala vive AGE_MIN minutos con sus jugadores y LUEGO entra
+ *   uno tardío, que debe converger. Caza la sala fantasma (fuga del offer
+ *   pool de Trystero: a los minutos nadie anuncia). Opt-in por lento.
  *
  * Variables:
  *   E2E_PEERS="5,10,15,20"  tamaños de sala escalonados a probar
  *   E2E_BURST="15"          tamaños de sala en ráfaga ("" = ninguno)
  *   E2E_SLOW="8"            tamaños de sala con mitad lenta ("" = ninguno)
  *   E2E_PUBLIC=""           tamaños de sala vía trackers públicos ("" = ninguno)
+ *   E2E_AGE_MIN=0           minutos de envejecido (0 = no probar); E2E_AGE_N=4
  *   E2E_TRACKER_PORT=18923  puerto ws del tracker local
  *   E2E_JOIN_GAP_MS=1200    pausa entre uniones escalonadas
  *   E2E_CONVERGE_MS=150000  tiempo máx. de convergencia por sala
@@ -52,6 +56,8 @@ const PEERS = parseList(process.env.E2E_PEERS, '5,10,15,20')
 const BURST = parseList(process.env.E2E_BURST, '15')
 const SLOW = parseList(process.env.E2E_SLOW, '8')
 const PUBLIC = parseList(process.env.E2E_PUBLIC, '')
+const AGE_MIN = Math.max(0, parseFloat(process.env.E2E_AGE_MIN || '0') || 0)
+const AGE_N = Math.max(3, parseInt(process.env.E2E_AGE_N || '4', 10) || 4)
 const LAG_MS = Math.max(0, parseInt(process.env.E2E_LAG_MS || '600', 10) || 0)
 const LOSS_PCT = Math.min(90, Math.max(0, parseFloat(process.env.E2E_LOSS_PCT || '15') || 0))
 /** "1" = el host también sufre lag/pérdida (peor caso: anfitrión con mal WiFi) */
@@ -71,13 +77,16 @@ interface Escenario {
   lossPct: number
   /** true = trackers públicos de producción en vez del local */
   publico: boolean
+  /** minutos que la sala vive antes de que entre el último invitado */
+  ageMin: number
 }
 
 const ESCENARIOS: Escenario[] = [
-  ...PEERS.map((n) => ({ n, tag: 'escalonado', gap: JOIN_GAP_MS, slowFrom: 0, lagMs: 0, lossPct: 0, publico: false })),
-  ...BURST.map((n) => ({ n, tag: 'ráfaga', gap: 0, slowFrom: 0, lagMs: 0, lossPct: 0, publico: false })),
-  ...SLOW.map((n) => ({ n, tag: 'lentos', gap: JOIN_GAP_MS, slowFrom: Math.floor(n / 2) + 1, lagMs: LAG_MS, lossPct: LOSS_PCT, publico: false })),
-  ...PUBLIC.map((n) => ({ n, tag: 'público', gap: JOIN_GAP_MS * 2, slowFrom: 0, lagMs: 0, lossPct: 0, publico: true }))
+  ...PEERS.map((n) => ({ n, tag: 'escalonado', gap: JOIN_GAP_MS, slowFrom: 0, lagMs: 0, lossPct: 0, publico: false, ageMin: 0 })),
+  ...BURST.map((n) => ({ n, tag: 'ráfaga', gap: 0, slowFrom: 0, lagMs: 0, lossPct: 0, publico: false, ageMin: 0 })),
+  ...SLOW.map((n) => ({ n, tag: 'lentos', gap: JOIN_GAP_MS, slowFrom: Math.floor(n / 2) + 1, lagMs: LAG_MS, lossPct: LOSS_PCT, publico: false, ageMin: 0 })),
+  ...PUBLIC.map((n) => ({ n, tag: 'público', gap: JOIN_GAP_MS * 2, slowFrom: 0, lagMs: 0, lossPct: 0, publico: true, ageMin: 0 })),
+  ...(AGE_MIN > 0 ? [{ n: AGE_N, tag: 'envejecido', gap: JOIN_GAP_MS, slowFrom: 0, lagMs: 0, lossPct: 0, publico: false, ageMin: AGE_MIN }] : [])
 ]
 
 let tracker: InstanceType<typeof TrackerServer> | null = null
@@ -127,7 +136,7 @@ async function leerConteo(p: Page): Promise<string | null> {
 for (const esc of ESCENARIOS) {
   const { n, tag, gap } = esc
   test(`sala P2P real con ${n} jugadores (${tag}): todos ven a todos`, async ({ browser }, testInfo) => {
-    test.setTimeout(Math.max(240_000, CONVERGE_MS + 120_000))
+    test.setTimeout(Math.max(240_000, CONVERGE_MS + 120_000) + esc.ageMin * 60_000 + 60_000)
     const baseURL = testInfo.project.use.baseURL as string
     const salaId = genSalaId()
     const trackerQ = `tracker=${encodeURIComponent(`ws://127.0.0.1:${TRACKER_PORT}`)}`
@@ -172,9 +181,16 @@ for (const esc of ESCENARIOS) {
           Array.from({ length: n - 1 }, (_, k) => abrir(`Jugador ${k + 2}`, '', redDe(k + 2)).then(() => undefined))
         )
       } else {
-        for (let i = 2; i <= n; i++) {
+        // el último invitado puede llegar tarde (envejecido): la sala vive
+        // ageMin minutos antes de que entre
+        const tardio = esc.ageMin > 0 ? n : n + 1
+        for (let i = 2; i < tardio; i++) {
           await sleep(gap)
           await abrir(`Jugador ${i}`, '', redDe(i))
+        }
+        if (esc.ageMin > 0) {
+          await sleep(esc.ageMin * 60_000)
+          await abrir(`Jugador ${n}`, '', redDe(n))
         }
       }
 
@@ -195,6 +211,7 @@ for (const esc of ESCENARIOS) {
       )
       const diagnostico =
         `sala ${salaId} con ${n} jugadores (${tag}, objetivo ${objetivo}` +
+        (esc.ageMin > 0 ? `, envejecido ${esc.ageMin} min` : '') +
         (esc.slowFrom > 0 ? `, lentos desde Jugador ${esc.slowFrom}: lagMs=${esc.lagMs} lossPct=${esc.lossPct}` : '') +
         `):\n` +
         estado.map((s) => `  - ${s.name}${lentos.has(s.name) ? ' (lento)' : ''}: ${s.conteo ?? 'SIN CONTEO (¿limbo?)'}`).join('\n')

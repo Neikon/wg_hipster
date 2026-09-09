@@ -86,6 +86,7 @@
     } else if (e.t === 'synced') {
       synced = true
       rejoining = false
+      try { sessionStorage.removeItem(`wg_hipster:reloads:${salaId}`) } catch {}
     }
   }
 
@@ -204,6 +205,16 @@
     // watchdog: invitado sin sincronizar >12 s → re-anunciarse en trackers
     // (la reconexión crea sockets nuevos y resetea el backoff de Trystero).
     // Si además no hay ningún tracker abierto, no se esperan los 12 s.
+    // Último recurso: recarga dura topada. El pool de ofertas de Trystero es
+    // global a la página y no se limpia al reconectar en caliente: solo una
+    // recarga (contexto JS nuevo) lo sanea. Topado para no ciclar si la sala
+    // ya no existe; al sincronizar se resetea el contador.
+    const HARD_RELOAD_MS = 30000
+    const MAX_HARD_RELOADS = 2
+    const reloadKey = `wg_hipster:reloads:${freshSalaId}`
+    const reloadsHechas = () => {
+      try { return parseInt(sessionStorage.getItem(reloadKey) || '0', 10) || 0 } catch { return MAX_HARD_RELOADS }
+    }
     const watch = setInterval(()=>{
       if (!node) return
       const snap = node.snapshot()
@@ -211,6 +222,9 @@
         reconectar('Conexión lenta, reintentando…')
       } else if (!snap.isHost && !snap.syncedOnce && relaysTotal > 0 && relaysAbiertos === 0 && Date.now() - joinedAt > 5000) {
         reconectar('Sin señalización, reintentando…')
+      } else if (!snap.isHost && !snap.syncedOnce && Date.now() - joinedAt > HARD_RELOAD_MS && reloadsHechas() < MAX_HARD_RELOADS) {
+        try { sessionStorage.setItem(reloadKey, String(reloadsHechas() + 1)) } catch {}
+        location.reload()
       }
     }, 2000)
 
