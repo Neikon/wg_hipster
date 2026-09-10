@@ -2,6 +2,7 @@
   import { generateSalaId } from '../lib/utils/id'
   import { randomName, sanitizeName } from '../lib/utils/names'
   import ThemeToggle from '../components/ThemeToggle.svelte'
+  import KoFi from '../components/KoFi.svelte'
   let name = randomName()
   let error=''
   function crear(){
@@ -27,6 +28,7 @@
       <button on:click={crear} disabled={!!error || !sanitizeName(name)}>Crear sala</button>
     </div>
     <p class="muted" style="font-size:0.85rem">1–20 jugadores · Adivina la canción · Sin registro</p>
+    <KoFi />
   </div>
   <div style="margin-top:1rem" class="muted">
     <small>wg_hipster · Svelte + Trystero (P2P). El enlace contiene el id de la sala.</small>

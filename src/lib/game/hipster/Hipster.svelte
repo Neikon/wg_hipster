@@ -9,6 +9,7 @@
   import { tinteActual, tinteDeCaratula } from './colores'
   import { theme } from '../../../lib/stores/theme'
   import Reproductor from '../../../components/Reproductor.svelte'
+  import KoFi from '../../../components/KoFi.svelte'
 
   export let onAction: (a:any)=>void = ()=>{}
 
@@ -443,6 +444,7 @@
       <button on:click={cerrar} style="width:100%;margin-top:1rem">Ver resultados</button>
     {:else}
       <p class="muted" style="margin-top:1rem">El anfitrión está corrigiendo…</p>
+      <KoFi />
     {/if}
   </div>
 {:else if state.phase === 'resultados'}
@@ -496,6 +498,7 @@
     {:else}
       <p class="muted">Esperando anfitrión...</p>
     {/if}
+    <KoFi />
   </div>
 {:else if state.phase === 'final'}
   <div style="text-align:center">
@@ -508,5 +511,6 @@
     {#if room.isHost}
       <button on:click={restart} style="width:100%">Volver al lobby</button>
     {/if}
+    <KoFi />
   </div>
 {/if}

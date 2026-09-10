@@ -18,7 +18,7 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 
 - `src/App.svelte`, `src/main.ts` — entrada + router hash (`#/` → Landing, `#/sala/<id>` → Room)
 - `src/routes/{Landing,Room,Game}.svelte` — páginas; `Room.svelte` contiene la lógica P2P agnóstica al juego (hello/requestState/stateSync/action/rename, heartbeat 2 s, tick host 1 s, `electNewHost`; un solo juego) + vigía de señalización (línea `Señalización X/Y`, aviso fantasma al host con recarga, rejoin rápido del invitado si 0 trackers, recarga dura topada x2 si sigue sin sync)
-- `src/components/{PlayerList,ShareLink,NameInput}.svelte` — UI lobby
+- `src/components/{PlayerList,ShareLink,NameInput,KoFi}.svelte` — UI lobby + píldora ko-fi (landing/lobby/espera/resultados)
 - `src/app.css` + `src/lib/stores/theme.ts` + `src/components/ThemeToggle.svelte` — estilo festival póster dual (claro/oscuro según sistema + toggle persistido)
 - `src/lib/game/hipster/colores.ts` — color dinámico de carátula (Canvas + contraste WCAG AA, store `tinteActual`)
 - `src/lib/net/{types,trysteroAdapter,room,transport}.ts` — `Msg`, adapter Trystero (`appId='wg_hipster_v1_'+salaId`, 4 trackers verificados 2026-09-09, 5 STUN), `electNewHost`/`isRoomFull`, `relayStatus()` (sockets trackers); `scripts/patch-trystero.js` (postinstall) corrige la fuga del offer pool de trystero 0.20.1 (40 RTCPeerConnection fugadas por ciclo → sala fantasma a los minutos); hooks solo-e2e vía query del hash: `transport.trackerUrls()` acepta `?tracker=ws://…` (repetible) y el adapter `?lagMs=&lossPct=` (móvil lento simulado)

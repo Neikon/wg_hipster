@@ -10,6 +10,7 @@
   import PlayerList from '../components/PlayerList.svelte'
   import ShareLink from '../components/ShareLink.svelte'
   import NameInput from '../components/NameInput.svelte'
+  import KoFi from '../components/KoFi.svelte'
   import ThemeToggle from '../components/ThemeToggle.svelte'
   import Game from './Game.svelte'
   import { tinteActual } from '../lib/game/hipster/colores'
@@ -340,6 +341,7 @@
           <h4>Cambiar nombre</h4>
           <NameInput value={peers.find(p=>p.id===selfId)?.name || ''} on:save={onRename} />
         </div>
+        <KoFi />
       </div>
     {/if}
   </div>
