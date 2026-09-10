@@ -13,6 +13,17 @@ export const ADJETIVOS: readonly string[] = [
 ]
 
 /**
+ * Easter eggs: apodos de la cuadrilla que salen con probabilidad baja (~8 %).
+ * A petición explícita se incluyen también Franco, Mojón y Salchicha.
+ */
+export const EASTER_EGGS: readonly string[] = [
+  'Verdurita', 'Daza', 'Ryuu', 'Manzano', 'Terry', 'Maika', 'Jaime', 'Curro',
+  'Franco', 'Mojón', 'Salchicha'
+]
+
+const PROB_EASTER_EGG = 0.08
+
+/**
  * Nombre aleatorio "Animal Adjetivo" (p. ej. "Zorro Veloz") para quien entra
  * sin elegir nombre. `excluidos` evita duplicados dentro de la sala; con 400
  * combinaciones y 20 jugadores como máximo, el reintento termina siempre.
@@ -20,7 +31,10 @@ export const ADJETIVOS: readonly string[] = [
 export function randomName(excluidos: readonly string[] = []): string {
   const libres = new Set(excluidos)
   for (let intento = 0; intento < 50; intento++) {
-    const nombre = `${ANIMALES[Math.floor(Math.random() * ANIMALES.length)]} ${ADJETIVOS[Math.floor(Math.random() * ADJETIVOS.length)]}`
+    const huevo = Math.random() < PROB_EASTER_EGG
+    const nombre = huevo
+      ? EASTER_EGGS[Math.floor(Math.random() * EASTER_EGGS.length)]
+      : `${ANIMALES[Math.floor(Math.random() * ANIMALES.length)]} ${ADJETIVOS[Math.floor(Math.random() * ADJETIVOS.length)]}`
     if (!libres.has(nombre)) return nombre
   }
   // Cinturón y tirantes: sufijo si la sala estuviera llenísima de duplicados.
