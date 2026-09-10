@@ -39,11 +39,6 @@ import { Server as TrackerServer } from 'bittorrent-tracker'
  *   E2E_LAG_MS=600         retardo base (ms) de los peers lentos
  *   E2E_LOSS_PCT=15        % de mensajes perdidos por los peers lentos
  *   E2E_SLOW_HOST=1        el host también sufre lag/pérdida (peor caso)
- *   E2E_LAG_MS=600         retardo base (ms) de los peers lentos
- *   E2E_LOSS_PCT=15        % de mensajes perdidos por los peers lentos
- *   E2E_TRACKER_PORT=18923  puerto ws del tracker local
- *   E2E_JOIN_GAP_MS=1200    pausa entre uniones escalonadas
- *   E2E_CONVERGE_MS=150000  tiempo máx. de convergencia por sala
  */
 
 const parseList = (v: string | undefined, def: string): number[] =>
