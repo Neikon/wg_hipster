@@ -3,7 +3,7 @@
   const URL = 'https://ko-fi.com/ulisesrp'
 </script>
 
-<a class="kofi" href={URL} target="_blank" rel="noopener" aria-label="Invítame a un café en ko-fi">☕ Invítame a un café</a>
+<a class="kofi" href={URL} target="_blank" rel="noopener" aria-label="¿Me invitas a un café? en ko-fi">☕ ¿Me invitas a un café?</a>
 
 <style>
   .kofi {
