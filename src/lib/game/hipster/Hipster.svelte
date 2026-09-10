@@ -295,14 +295,16 @@
       {#if cargando}
         <button disabled>Cargando música…</button>
       {:else if tracks}
-        <div style="display:grid;gap:0.5rem;margin-top:1rem">
+        <div class="acciones-sticky">
           <button on:click={start} style="width:100%">Empezar hipster ({tracks.length} rondas)</button>
           <button on:click={cargar} style="width:100%;background:var(--muted)">Recargar lista</button>
         </div>
       {:else if listaId === BUSCAR_ID && !seleccion}
         <p class="muted">Busca y elige un álbum, un artista o una lista para jugar.</p>
       {:else}
-        <button on:click={cargar} style="width:100%">Cargar lista</button>
+        <div class="acciones-sticky">
+          <button on:click={cargar} style="width:100%">Cargar lista</button>
+        </div>
       {/if}
     {:else}
       <p class="muted">El anfitrión está preparando la música…</p>
@@ -339,7 +341,7 @@
       {@const trackActual = state.tracks[state.ronda]}
       {@const pistasCfg = state.config.pistas}
       {#if trackActual && pistasCfg.length}
-        <ul class="muted pistas" style="margin:1rem 0 0;padding-left:1.2rem;display:grid;gap:0.2rem;grid-template-columns:minmax(0,1fr);overflow-wrap:anywhere;word-break:break-all">
+        <ul class="muted pistas" style="margin:1rem 0 0;padding-left:1.2rem;display:grid;gap:0.2rem;grid-template-columns:minmax(0,1fr);overflow-wrap:anywhere">
           {#if pistasCfg.includes('artista')}<li>🎤 Artista: <strong>{trackActual.artista}</strong></li>{/if}
           {#if pistasCfg.includes('titulo')}<li>🔤 Título: <strong>{state.config.modo === 'titulo' ? pistaTitulo(trackActual.titulo) : trackActual.titulo}</strong></li>{/if}
           {#if pistasCfg.includes('anio') && trackActual.anio !== null}<li>📅 Año: <strong>{trackActual.anio}</strong></li>{/if}
@@ -357,7 +359,7 @@
         {/each}
       </div>
     {/if}
-    <p class="muted" style="margin-top:0.8rem">{Object.keys(state.respuestas).length}/{peers.length} han respondido</p>
+    <p class="muted" style="margin-top:0.8rem">{Object.keys(state.respuestas).length}/{peers.length} han respondido{#if Object.keys(state.respuestas).length}: {Object.keys(state.respuestas).map((pid)=>nombre(pid)).join(', ')}{/if}</p>
   </div>
 {:else if state.phase === 'resultados'}
   {@const revelada = state.tracks[state.ronda]}
@@ -382,7 +384,7 @@
     {:else}
       <p>Correcta: <strong style="color:var(--success)">{state.opciones[state.respuestaCorrecta]}</strong></p>
     {/if}
-    <ul style="text-align:left">
+    <ul class="ficha" style="text-align:left" aria-label="Respuestas de la ronda">
       {#each Object.entries(state.respuestas) as [pid, ansRaw]}
         {@const ans = ansRaw as number}
         {#if state.config.modo === 'anio'}
@@ -395,7 +397,7 @@
       {/each}
     </ul>
     <h3>Puntos</h3>
-    <ul style="text-align:left">
+    <ul class="ficha" style="text-align:left" aria-label="Puntos totales">
       {#each Object.entries(state.puntos).sort((a,b)=>b[1]-a[1]) as [pid, pts]}
         <li>{nombre(pid)}: {pts}</li>
       {/each}

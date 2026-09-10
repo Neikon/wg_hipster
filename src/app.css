@@ -131,8 +131,18 @@ h1,h2 { margin: 0 0 0.5rem; letter-spacing: -0.01em }
 /* Lista de pistas: los items no deben ensanchar la tarjeta (grid blowout) */
 .pistas > li { min-width: 0 }
 
+/* Botonera del lobby siempre visible al pie (el formulario es largo) */
+.acciones-sticky {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  position: sticky;
+  bottom: 0;
+  padding: 0.6rem 0;
+  background: var(--card);
+}
+
 /* Carátula protagonista */
-.pistas > li { min-width: 0 }
 .cover {
   width: min(64vw, 240px);
   aspect-ratio: 1;
