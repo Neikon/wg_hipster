@@ -1,8 +1,8 @@
 <script lang="ts">
   import { generateSalaId } from '../lib/utils/id'
-  import { assignName, sanitizeName } from '../lib/utils/names'
+  import { randomName, sanitizeName } from '../lib/utils/names'
   import ThemeToggle from '../components/ThemeToggle.svelte'
-  let name = assignName(1)
+  let name = randomName()
   let error=''
   function crear(){
     const s = sanitizeName(name)

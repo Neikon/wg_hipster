@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { roomStore, initRoom } from '../lib/stores/roomStore'
   import { gameStore } from '../lib/stores/gameStore'
-  import { assignName, sanitizeName } from '../lib/utils/names'
+  import { randomName, sanitizeName } from '../lib/utils/names'
   import { joinTrystero, relayStatus } from '../lib/net/trysteroAdapter'
   import { SyncNode } from '../lib/net/syncEngine'
   import type { SyncEvent } from '../lib/net/syncEngine'
@@ -44,8 +44,14 @@
   const REJOIN_MS = 12000
   // Señalización (trackers): X de Y sockets abiertos. Con 0 abiertos la sala
   // es fantasma —la malla de datos vive pero nadie nuevo puede entrar—.
+  // El aviso de fantasma lleva gracia inicial: al cargar, los sockets tardan
+  // unos segundos en abrir y un 0/4 fugaz sería un falso positivo.
   let relaysAbiertos = 0
   let relaysTotal = 0
+  const SIN_SENAL_MS = 8000
+  // Reloj reactivo (1 s) para que las condiciones con Date.now() se reevalúen
+  // aunque los contadores no cambien.
+  let ahora = Date.now()
   function actualizarRelays(){
     try {
       const st = relayStatus()
@@ -122,6 +128,7 @@
     secondInt = setInterval(()=>{
       node?.tickSecond()
       actualizarRelays()
+      ahora = Date.now()
     }, 1000)
   }
 
@@ -133,7 +140,7 @@
     const freshSalaId = salaId
     // estado limpio al (re)entrar en una sala: el store puede traer datos de otra anterior
     gameStore.set({ phase: 'lobby', version: 0, gameId: juegoId })
-    // nombre inicial: del query o Jugador N (se asignará tras ver peers)
+    // nombre inicial: del query o aleatorio Animal+Adjetivo
     let nameToUse = initialName && sanitizeName(initialName) ? sanitizeName(initialName)! : ''
     // suscribirse a stores (sin sincronizar salaId: es fijo durante la vida de Room)
     unsubRoom = roomStore.subscribe(v=>{
@@ -143,7 +150,7 @@
 
     // iniciar room (los stores alimentan a la UI; el protocolo vive en SyncNode)
     if (isHostParam) {
-      if (!nameToUse) nameToUse = assignName(1)
+      if (!nameToUse) nameToUse = randomName()
       selfId = initRoom(freshSalaId, nameToUse, true)
       // init game
       const initPeers = [{id: selfId, name: nameToUse}] as any
@@ -153,10 +160,9 @@
         : { phase: 'lobby', version: 0, gameId: juegoId }
       gameStore.set(initState); gameState = initState
     } else {
-      // guest: asignaremos nombre tras conectar, provisional
+      // guest: nombre aleatorio evitando los peers ya visibles
       if (!nameToUse) {
-        // se asignará al recibir peers, por ahora Jugador ?
-        nameToUse = assignName(2)
+        nameToUse = randomName(peers.map((p: any) => p.name))
       }
       selfId = initRoom(freshSalaId, nameToUse, false)
       gameStore.set({ phase: 'lobby', version: 0, gameId: juegoId })
@@ -305,7 +311,7 @@
     {#if relaysTotal > 0}
       <p class="muted" style="font-size:0.8rem;margin:0.4rem 0 0">Señalización: {relaysAbiertos}/{relaysTotal} trackers</p>
     {/if}
-    {#if isHost && relaysTotal > 0 && relaysAbiertos === 0}
+    {#if isHost && relaysTotal > 0 && relaysAbiertos === 0 && ahora - joinedAt > SIN_SENAL_MS}
       <div style="background:var(--error);color:white;padding:0.6rem 1rem;border-radius:8px;margin:0.6rem 0;display:flex;gap:0.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
         <span>Sin conexión con los trackers: ningún jugador nuevo puede entrar. Recarga la página para re-anunciar la sala.</span>
         <button on:click={()=>location.reload()} style="background:white;color:var(--error);padding:0.3rem 0.7rem;font-size:0.85rem">Recargar</button>
