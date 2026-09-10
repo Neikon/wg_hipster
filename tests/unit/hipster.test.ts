@@ -480,3 +480,81 @@ describe('listas', () => {
     expect(mostrarAlbum({ titulo: 'Up', album: 'Listen Up!' })).toBe(true)
   })
 })
+
+describe('hipster experto', () => {
+  const empezarExperto = (ids: string[]) => {
+    const s = createInitialState(ids.map((id) => ({ id })), { modo: 'titulo', dificultad: 'experto' })
+    return reducer(
+      s,
+      { t: 'startGame', juegoId: 'hipster', config: { modo: 'titulo', dificultad: 'experto' }, tracks: [...TRACKS], pool: [...TRACKS] },
+      host
+    )
+  }
+
+  it('pistasPara experto es vacío y no fuerza dificultad al tocar pistas', () => {
+    expect(pistasPara('experto')).toEqual([])
+    const s = createInitialState([{ id: 'host1' }], { modo: 'titulo', dificultad: 'experto', pistas: ['artista'] })
+    expect(s.config.dificultad).toBe('experto')
+    expect(s.config.pistas).toEqual(['artista'])
+  })
+
+  it('flujo completo: textos → corrección → veredictos + extra → resultados', () => {
+    let s = empezarExperto(['host1', 'a'])
+    expect(s.phase).toBe('pregunta')
+    expect(s.opciones).toEqual([])
+    // answer por índice no vale en experto
+    expect(reducer(s, { t: 'answer', opcion: 0 }, { isHost: false, peerId: 'a' })).toBe(s)
+    // textos: vacío se ignora, el segundo envío se bloquea
+    expect(reducer(s, { t: 'answerTexto', texto: '   ' }, { isHost: false, peerId: 'a' })).toBe(s)
+    s = reducer(s, { t: 'answerTexto', texto: '  Tema Uno  ' }, { isHost: false, peerId: 'a' })
+    expect(s.respuestas['a']).toBe('Tema Uno')
+    expect(reducer(s, { t: 'answerTexto', texto: 'Otro' }, { isHost: false, peerId: 'a' })).toBe(s)
+    expect(s.phase).toBe('pregunta')
+    // responde el host (incluido): cierra a corrección sin puntos
+    s = reducer(s, { t: 'answerTexto', texto: 'Tema Uno Queen 1975' }, { isHost: true, peerId: 'host1' })
+    expect(s.phase).toBe('correccion')
+    expect(s.puntos['a']).toBe(0)
+    // solo el host corrige
+    expect(reducer(s, { t: 'veredicto', peerId: 'a', buena: true }, { isHost: false, peerId: 'a' })).toBe(s)
+    s = reducer(s, { t: 'veredicto', peerId: 'a', buena: true }, host)
+    s = reducer(s, { t: 'extra', peerId: 'a', puntos: 50 }, host)
+    expect(s.veredictos['a']).toEqual({ buena: true, extra: 50 })
+    // extra inválido se ignora
+    expect(reducer(s, { t: 'extra', peerId: 'a', puntos: 0 }, host)).toBe(s)
+    expect(reducer(s, { t: 'extra', peerId: 'fantasma', puntos: 50 }, host)).toBe(s)
+    s = reducer(s, { t: 'cerrarCorreccion' }, host)
+    expect(s.phase).toBe('resultados')
+    expect(s.puntos['a']).toBe(150)
+    expect(s.puntos['host1']).toBe(0)
+  })
+
+  it('el timer cerrado lleva a corrección y next limpia veredictos', () => {
+    let s = empezarExperto(['host1', 'a'])
+    s = reducer(s, { t: 'answerTexto', texto: 'X' }, { isHost: false, peerId: 'a' })
+    // forzar fin de tiempo
+    let cur = { ...s, timer: 1 }
+    cur = reducer(cur, { t: 'tick' }, host)
+    expect(cur.phase).toBe('correccion')
+    cur = reducer(cur, { t: 'cerrarCorreccion' }, host)
+    expect(cur.phase).toBe('resultados')
+    cur = reducer(cur, { t: 'next' }, host)
+    expect(cur.phase).toBe('pregunta')
+    expect(cur.veredictos).toEqual({})
+    expect(cur.respuestas).toEqual({})
+  })
+
+  it('playerLeft en experto cierra a corrección y limpia su veredicto', () => {
+    let s = empezarExperto(['host1', 'a', 'b'])
+    s = reducer(s, { t: 'answerTexto', texto: 'X' }, { isHost: false, peerId: 'a' })
+    s = reducer(s, { t: 'playerLeft', peerId: 'b' }, host)
+    expect(s.phase).toBe('pregunta')
+    s = reducer(s, { t: 'answerTexto', texto: 'Y' }, { isHost: true, peerId: 'host1' })
+    expect(s.phase).toBe('correccion')
+    expect(s.puntos['b']).toBeUndefined()
+  })
+
+  it('experto con modo año se degrada a normal', () => {
+    const s = createInitialState([{ id: 'host1' }], { modo: 'anio', dificultad: 'experto' })
+    expect(s.config.dificultad).toBe('normal')
+  })
+})

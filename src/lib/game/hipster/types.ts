@@ -10,7 +10,7 @@ export interface HipsterTrack {
 }
 
 export type ModoJuego = 'titulo' | 'anio'
-export type Dificultad = 'facil' | 'normal' | 'dificil'
+export type Dificultad = 'facil' | 'normal' | 'dificil' | 'experto'
 /** Info extra que se muestra al jugador para ayudarle a responder. */
 export type Pista = 'titulo' | 'artista' | 'anio' | 'album'
 
@@ -24,7 +24,7 @@ export interface HipsterConfig {
 }
 
 export interface HipsterState {
-  phase: 'lobby' | 'pregunta' | 'resultados' | 'final'
+  phase: 'lobby' | 'pregunta' | 'correccion' | 'resultados' | 'final'
   ronda: number
   /** Rondas elegidas (corte de N). */
   tracks: HipsterTrack[]
@@ -33,7 +33,13 @@ export interface HipsterState {
   clipUrl: string
   opciones: string[]
   respuestaCorrecta: number
-  respuestas: Record<string, number> // peerId -> opcion idx
+  /** En experto la respuesta es el texto escrito; si no, el índice de opción. */
+  respuestas: Record<string, number | string> // peerId -> opcion idx o texto
+  /**
+   * Corrección del host en experto (peerId -> veredicto). Vive en el estado
+   * para viajar por stateSync y sobrevivir a la migración de host.
+   */
+  veredictos: Record<string, { buena: boolean; extra: number }>
   puntos: Record<string, number>
   timer: number
   version: number
@@ -49,6 +55,10 @@ export interface HipsterState {
 export type HipsterAction =
   | { t: 'startGame'; juegoId?: 'hipster'; config?: Partial<HipsterConfig>; tracks?: HipsterTrack[]; pool?: HipsterTrack[] }
   | { t: 'answer'; opcion: number }
+  | { t: 'answerTexto'; texto: string }
+  | { t: 'veredicto'; peerId: string; buena: boolean }
+  | { t: 'extra'; peerId: string; puntos: number }
+  | { t: 'cerrarCorreccion' }
   | { t: 'setAutoplayDefault'; valor: boolean }
   | { t: 'tick' }
   | { t: 'next' }

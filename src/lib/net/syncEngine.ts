@@ -70,7 +70,7 @@ export class SyncNode {
    * no la refleja, se reenvía cada 2 s hasta 30 veces. Sin esto, una respuesta
    * perdida deja la ronda esperando al temporizador.
    */
-  private pendingAnswer: { opcion: number; ronda: number; reintentos: number } | null = null
+  private pendingAnswer: { opcion?: number; texto?: string; ronda: number; reintentos: number } | null = null
   private static readonly MAX_REINTENTOS = 30
   private getGameModule: (id: string) => GameModuleLike | null
   private send: (msg: any) => void
@@ -187,7 +187,8 @@ export class SyncNode {
         this.pendingAnswer = null
       } else if (p.reintentos < SyncNode.MAX_REINTENTOS) {
         p.reintentos++
-        this.send({ t: 'action', juegoId: this.juegoId, action: { t: 'answer', opcion: p.opcion }, from: this.selfId })
+        const reintento = p.texto !== undefined ? { t: 'answerTexto', texto: p.texto } : { t: 'answer', opcion: p.opcion }
+        this.send({ t: 'action', juegoId: this.juegoId, action: reintento, from: this.selfId })
       } else {
         this.pendingAnswer = null
       }
@@ -203,6 +204,8 @@ export class SyncNode {
       this.send({ t: 'action', juegoId: this.juegoId, action, from: this.selfId })
       if (action.t === 'answer') {
         this.pendingAnswer = { opcion: action.opcion, ronda: this.gameState?.ronda ?? -1, reintentos: 0 }
+      } else if (action.t === 'answerTexto') {
+        this.pendingAnswer = { texto: action.texto, ronda: this.gameState?.ronda ?? -1, reintentos: 0 }
       }
     }
   }

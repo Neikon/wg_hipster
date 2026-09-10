@@ -1,7 +1,7 @@
 <script lang="ts">
   import { gameStore } from '../../stores/gameStore'
   import { roomStore } from '../../stores/roomStore'
-  import { DEFAULT_CONFIG, margenPara, pistasPara } from './engine'
+  import { DEFAULT_CONFIG, margenPara, pistasPara, esExperto, PUNTOS_EXTRA } from './engine'
   import { LISTAS, buscarEnItunes, prepararPartida, prepararPartidaBusqueda } from './listas'
   import type { ResultadoBusqueda, TipoBusqueda } from './listas'
   import type { HipsterState, HipsterTrack, Dificultad, ModoJuego, Pista } from './types'
@@ -37,13 +37,22 @@
   let seleccion: ResultadoBusqueda | null = null
   $: state = $gameStore as HipsterState
   $: room = $roomStore
-  $: if (state.phase === 'lobby' && state.config) {
-    segundos = state.config.segundos
-    listaId = state.config.listaId
-    numRondas = state.config.numRondas
-    modo = state.config.modo
-    dificultad = state.config.dificultad
-    pistas = [...state.config.pistas]
+  // Hidratar el formulario SOLO al entrar al lobby: si se hiciera en cada
+  // actualización del estado, la entrada de un invitado (playerJoined
+  // versiona el estado) pisaría la configuración que el host está eligiendo
+  // (modo, dificultad, rondas, lista…).
+  let enLobby = false
+  $: {
+    const ahoraLobby = state.phase === 'lobby'
+    if (ahoraLobby && !enLobby && state.config) {
+      segundos = state.config.segundos
+      listaId = state.config.listaId
+      numRondas = state.config.numRondas
+      modo = state.config.modo
+      dificultad = state.config.dificultad
+      pistas = [...state.config.pistas]
+    }
+    enLobby = ahoraLobby
   }
   $: claveSel = seleccion ? `${seleccion.tipo}:${seleccion.id}` : ''
   // Si el host cambia de lista, modo, rondas o selección, hay que volver a cargar.
@@ -52,11 +61,12 @@
     pool = null
     descartados = 0
   }
-  // Al cambiar de ronda se limpia el campo del año.
+  // Al cambiar de ronda se limpian los campos de respuesta.
   let ultimaRondaVista = -1
   $: if (state.phase === 'pregunta' && state.ronda !== ultimaRondaVista) {
     ultimaRondaVista = state.ronda
     anioEscrito = null
+    textoRespuesta = ''
   }
   let cargadaPara: { listaId: string; numRondas: number; busq: string; modo: ModoJuego } | null = null
 
@@ -107,6 +117,23 @@
   function answer(opcion:number){
     if (state.respuestas[room.selfId] !== undefined) return
     onAction({ t:'answer', opcion })
+  }
+  let textoRespuesta = ''
+  function answerTexto(){
+    if (state.respuestas[room.selfId] !== undefined) return
+    const texto = textoRespuesta.trim()
+    if (!texto) return
+    textoRespuesta = ''
+    onAction({ t:'answerTexto', texto })
+  }
+  function verdict(peerId:string, buena:boolean){
+    onAction({ t:'veredicto', peerId, buena })
+  }
+  function masExtra(peerId:string){
+    onAction({ t:'extra', peerId, puntos: PUNTOS_EXTRA })
+  }
+  function cerrar(){
+    onAction({ t:'cerrarCorreccion' })
   }
   function answerAnio(){
     if (state.respuestas[room.selfId] !== undefined) return
@@ -234,6 +261,7 @@
             <option value="facil">Fácil{modo === 'titulo' ? ' (todo)' : ' (±10 años)'}</option>
             <option value="normal">Normal{modo === 'titulo' ? ' (artista)' : ' (±5 años)'}</option>
             <option value="dificil">Difícil{modo === 'titulo' ? ' (nada)' : ' (±2 años)'}</option>
+            {#if modo === 'titulo'}<option value="experto">Experto (escribir título)</option>{/if}
           </select>
         </label>
         <fieldset style="border:0;margin:0;padding:0;display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
@@ -337,6 +365,20 @@
         </div>
         <p class="muted" style="margin-top:0.5rem">Vale cualquier año a ±{margenPara(state.config.dificultad)} del correcto.</p>
       {/if}
+    {:else if esExperto(state.config)}
+      {#if state.respuestas[room.selfId] !== undefined}
+        <p style="margin-top:1rem">Tu respuesta: <strong>{state.respuestas[room.selfId]}</strong> ✓</p>
+      {:else}
+        <div style="display:grid;gap:0.5rem;margin-top:1rem">
+          <input
+            type="text" maxlength="140" placeholder="Título… y artista, año, álbum si los sabes"
+            bind:value={textoRespuesta} aria-label="Título de la canción" style="width:100%"
+            on:keydown={(e)=>{ if (e.key === 'Enter') answerTexto() }}
+          />
+          <button on:click={answerTexto} disabled={!textoRespuesta.trim()} style="width:100%">Enviar</button>
+        </div>
+        <p class="muted" style="margin-top:0.5rem">Sin opciones: el anfitrión la dará por buena o por mala, con puntos extra si añades más datos.</p>
+      {/if}
     {:else}
       {@const trackActual = state.tracks[state.ronda]}
       {@const pistasCfg = state.config.pistas}
@@ -361,6 +403,48 @@
     {/if}
     <p class="muted" style="margin-top:0.8rem">{Object.keys(state.respuestas).length}/{peers.length} han respondido{#if Object.keys(state.respuestas).length}: {Object.keys(state.respuestas).map((pid)=>nombre(pid)).join(', ')}{/if}</p>
   </div>
+{:else if state.phase === 'correccion'}
+  {@const ronda = state.tracks[state.ronda]}
+  <div class="pantalla-ronda">
+    <h2>Corrección · Ronda {state.ronda+1}/{state.tracks.length}</h2>
+    {#if ronda?.artworkUrl}
+      <img class="cover-full" src={ronda.artworkUrl} alt="Carátula de {ronda.titulo}" />
+    {/if}
+    <ul class="ficha" aria-label="Ficha de la canción">
+      <li><span class="muted">🎵 Título:</span><strong>{ronda?.titulo}</strong></li>
+      <li><span class="muted">🎤 Artista:</span><strong>{ronda?.artista}</strong></li>
+      {#if ronda?.album}<li><span class="muted">💿 Álbum:</span><strong>{ronda.album}</strong></li>{/if}
+      {#if ronda?.anio !== null && ronda?.anio !== undefined}<li><span class="muted">📅 Año:</span><strong>{ronda.anio}</strong></li>{/if}
+    </ul>
+    {#if room.isHost}
+      <div style="display:grid;gap:0.6rem;margin-top:1rem">
+        {#each Object.entries(state.respuestas) as [pid, txt]}
+          {@const v = state.veredictos[pid]}
+          <div style="background:var(--card);border-radius:12px;padding:0.8rem">
+            <p style="margin:0 0 0.5rem"><strong>{nombre(pid)}</strong>: {txt}</p>
+            <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center">
+              <button
+                on:click={()=>verdict(pid, true)}
+                style="background:{v?.buena ? 'var(--success)' : 'var(--muted)'};padding:0.3rem 0.7rem;font-size:0.85rem;min-height:0"
+              >Buena</button>
+              <button
+                on:click={()=>verdict(pid, false)}
+                style="background:{v && !v.buena ? 'var(--error)' : 'var(--muted)'};padding:0.3rem 0.7rem;font-size:0.85rem;min-height:0"
+              >Mala</button>
+              <button
+                on:click={()=>masExtra(pid)}
+                style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem;min-height:0"
+                aria-label="Añadir {PUNTOS_EXTRA} puntos extra a {nombre(pid)}"
+              >+{PUNTOS_EXTRA}{v && v.extra ? ` (${v.extra})` : ''}</button>
+            </div>
+          </div>
+        {/each}
+      </div>
+      <button on:click={cerrar} style="width:100%;margin-top:1rem">Ver resultados</button>
+    {:else}
+      <p class="muted" style="margin-top:1rem">El anfitrión está corrigiendo…</p>
+    {/if}
+  </div>
 {:else if state.phase === 'resultados'}
   {@const revelada = state.tracks[state.ronda]}
   <div class="pantalla-ronda {state.config.modo === 'anio' ? 'modo-anio' : 'modo-titulo'}" style="text-align:center">
@@ -381,6 +465,8 @@
     {/if}
     {#if state.config.modo === 'anio'}
       <p>Año correcto: <strong style="color:var(--success)">{state.respuestaCorrecta}</strong></p>
+    {:else if esExperto(state.config)}
+      <p>Correcta: <strong style="color:var(--success)">{revelada?.titulo}</strong></p>
     {:else}
       <p>Correcta: <strong style="color:var(--success)">{state.opciones[state.respuestaCorrecta]}</strong></p>
     {/if}
@@ -391,6 +477,9 @@
           {@const dif = Math.abs(ans - (state.respuestaCorrecta as number))}
           {@const margen = margenPara(state.config.dificultad)}
           <li>{nombre(pid)}: {ans} {dif <= margen ? `✅ +100 (a ${dif})` : `❌ (a ${dif})`}</li>
+        {:else if esExperto(state.config)}
+          {@const v = state.veredictos[pid]}
+          <li>{nombre(pid)}: {ansRaw as string} {v?.buena ? `✅ +100${v.extra ? ` +${v.extra}` : ''}` : '❌'}</li>
         {:else}
           <li>{nombre(pid)}: {String.fromCharCode(65+ans)} {ans===state.respuestaCorrecta ? '✅ +100' : '❌'}</li>
         {/if}

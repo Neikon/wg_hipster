@@ -25,18 +25,18 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `src/lib/net/syncEngine.ts` — `SyncNode`: protocolo P2P (hello+eco/requestState/stateSync/action/rename, heartbeat 2 s, tick 1 s, migración de host); el invitado se incluye desde el inicio, reintenta sync y emite `synced`
 - `src/lib/stores/{roomStore,gameStore}.ts` — `roomStore` (sala/peers/joinOrder/isHost) + `gameStore` (aplica `stateSync` solo si versión mayor)
 - `src/lib/game/{types,registry}.ts` — contrato `GameModule` y registry dinámico por `juegoId`
-- `src/lib/game/hipster/` — juego wg_hipster (modos título/año, dificultad + pistas, autoplay, charts iTunes + buscador + playlists Deezer por JSONP)
+- `src/lib/game/hipster/` — juego wg_hipster (modos título/año, dificultad + pistas, autoplay, charts iTunes + buscador + playlists Deezer por JSONP); dificultad experto en modo título: sin opciones, texto libre, corrección del host (buena/mala + extra +50) con pantalla de espera
 - `src/lib/utils/{id,names}.ts` — `generateSalaId` (6 chars), `randomName` (Animal+Adjetivo 20×20, con excluidos), `sanitizeName`
 - `vite.config.ts` — `base=VITE_BASE || '/wg_hipster/'`, `server/preview` con `host:true, strictPort:true` (devcontainer)
 - `.devcontainer/devcontainer.json` + `post-create.sh` — imagen `typescript-node:22`, puertos 5173/4173
 - `.github/workflows/pages.yml` — build (`VITE_BASE=/wg_hipster/`) + `deploy-pages@v4`
-- `tests/unit/` — 72 tests (hipster 25, salaN 10, rondaRobusta 3, robustez+transporte 6+1, nombres 4, tema 2, colores 6, qr 2); `tests/e2e/` — 21 casos: P2P real 2 contextos + `multijugador.spec.ts` (salas P2P reales 5/10/15/20 escalonado + 15 en ráfaga + 8 con mitad lenta vía tracker local `bittorrent-tracker` devDep, con aserción `Señalización: 1/1`; `E2E_PUBLIC` usa trackers de producción bajo demanda; `E2E_AGE_MIN`/`E2E_AGE_N` opt-in para sala envejecida + tardío (caza sala fantasma); vars `E2E_PEERS`, `E2E_BURST`, `E2E_SLOW`, `E2E_PUBLIC`, `E2E_JOIN_GAP_MS`, `E2E_CONVERGE_MS`, `E2E_LAG_MS`, `E2E_LOSS_PCT`, `E2E_SLOW_HOST`; nota: 3 de los 6 trackers públicos fallan —btorrent.xyz, webtorrent.io, files.fm— y la redundancia lo absorbe)
+- `tests/unit/` — 78 tests (hipster 30, salaN 10, rondaRobusta 3, robustez+transporte 6+1, nombres 7, tema 2, colores 6, qr 2); `tests/e2e/` — 21 casos: P2P real 2 contextos + `multijugador.spec.ts` (salas P2P reales 5/10/15/20 escalonado + 15 en ráfaga + 8 con mitad lenta vía tracker local `bittorrent-tracker` devDep, con aserción `Señalización: 1/1`; `E2E_PUBLIC` usa trackers de producción bajo demanda; `E2E_AGE_MIN`/`E2E_AGE_N` opt-in para sala envejecida + tardío (caza sala fantasma); vars `E2E_PEERS`, `E2E_BURST`, `E2E_SLOW`, `E2E_PUBLIC`, `E2E_JOIN_GAP_MS`, `E2E_CONVERGE_MS`, `E2E_LAG_MS`, `E2E_LOSS_PCT`, `E2E_SLOW_HOST`; nota: 3 de los 6 trackers públicos fallan —btorrent.xyz, webtorrent.io, files.fm— y la redundancia lo absorbe)
 ## Comandos (Node 22)
 
 ```bash
 npm ci            # instalar (postCreate del devcontainer ya lo hace)
 npm run dev       # http://localhost:5173
-npm run test      # vitest run (72 tests)
+npm run test      # vitest run (78 tests)
 npm run check     # svelte-check + tsc
 npm run build     # dist/ para Pages
 npm run test:e2e  # Playwright; E2E_P2P=1 hace obligatorio el caso de trackers
