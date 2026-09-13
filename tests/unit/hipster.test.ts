@@ -289,13 +289,32 @@ describe('hipster engine', () => {
     expect(s.config.pistas).toEqual(['album'])
   })
 
-  it('ignora duplicados y opciones inválidas', () => {
+  it('permite cambiar respuesta en título e ignora opciones inválidas', () => {
     const s = empezar(createInitialState([{ id: 'a' }, { id: 'b' }]))
     const v0 = s.version
     expect(reducer(s, { t: 'answer', opcion: 9 }, { isHost: false, peerId: 'a' })).toBe(s)
     const s1 = reducer(s, { t: 'answer', opcion: 1 }, { isHost: false, peerId: 'a' })
     expect(s1.version).toBe(v0 + 1)
-    expect(reducer(s1, { t: 'answer', opcion: 0 }, { isHost: false, peerId: 'a' })).toBe(s1)
+    expect(s1.respuestas['a']).toBe(1)
+    // cambia a otra opción: versiona y guarda la nueva
+    const s2 = reducer(s1, { t: 'answer', opcion: 0 }, { isHost: false, peerId: 'a' })
+    expect(s2.version).toBe(v0 + 2)
+    expect(s2.respuestas['a']).toBe(0)
+    // repetir la misma no versiona
+    expect(reducer(s2, { t: 'answer', opcion: 0 }, { isHost: false, peerId: 'a' })).toBe(s2)
+  })
+
+  it('año sigue bloqueando al enviar', () => {
+    const base = createInitialState([{ id: 'a' }, { id: 'b' }], { modo: 'anio' })
+    const s = reducer(
+      base,
+      { t: 'startGame', juegoId: 'hipster', config: { modo: 'anio' }, tracks: [...TRACKS], pool: [...TRACKS] },
+      host
+    )
+    expect(s.phase).toBe('pregunta')
+    const s1 = reducer(s, { t: 'answer', opcion: 2000 }, { isHost: false, peerId: 'a' })
+    expect(s1.respuestas['a']).toBe(2000)
+    expect(reducer(s1, { t: 'answer', opcion: 2001 }, { isHost: false, peerId: 'a' })).toBe(s1)
   })
 
   it('respeta segundos personalizados y los limita a 5-300', () => {

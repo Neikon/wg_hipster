@@ -206,8 +206,11 @@ export function reducer(
   }
   if (action.t === 'answer') {
     if (state.phase !== 'pregunta') return state
+    // En experto solo vale texto (answerTexto); el índice nunca puntúa.
     if (esExperto(state.config)) return state
-    if (state.respuestas[ctx.peerId] !== undefined) return state
+    // En título con opciones se puede cambiar hasta el cierre; año bloquea.
+    const cambiable = state.config.modo === 'titulo'
+    if (!cambiable && state.respuestas[ctx.peerId] !== undefined) return state
     if (state.timer <= 0) return state
     if (state.config.modo === 'anio') {
       // año escrito a mano: 1900–2100
@@ -215,13 +218,16 @@ export function reducer(
     } else if (action.opcion < 0 || action.opcion > 3) {
       return state
     }
-    const respuestas = { ...state.respuestas, [ctx.peerId]: action.opcion }
-    const withAnswer = { ...state, respuestas, version: state.version + 1 }
-    const todos = Object.keys(withAnswer.puntos)
-    if (todos.length > 0 && todos.every((pid) => respuestas[pid] !== undefined)) {
-      return toResultados(withAnswer)
+    if (!cambiable || state.respuestas[ctx.peerId] !== action.opcion) {
+      const respuestas = { ...state.respuestas, [ctx.peerId]: action.opcion }
+      const withAnswer = { ...state, respuestas, version: state.version + 1 }
+      const todos = Object.keys(withAnswer.puntos)
+      if (todos.length > 0 && todos.every((pid) => respuestas[pid] !== undefined)) {
+        return toResultados(withAnswer)
+      }
+      return withAnswer
     }
-    return withAnswer
+    return state
   }
   if (action.t === 'answerTexto') {
     // Experto: título escrito a mano, se bloquea al enviar.

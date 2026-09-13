@@ -116,7 +116,8 @@
   }
 
   function answer(opcion:number){
-    if (state.respuestas[room.selfId] !== undefined) return
+    // Solo se llama desde los botones de opción (título no experto), donde
+    // se puede cambiar hasta el cierre; el motor ignora las inválidas.
     onAction({ t:'answer', opcion })
   }
   let textoRespuesta = ''
@@ -395,7 +396,6 @@
         {#each state.opciones as op, idx}
           <button
             on:click={()=>answer(idx)}
-            disabled={state.respuestas[room.selfId] !== undefined}
             class="btn-respuesta"
             style="text-align:left;border:1px solid var(--muted)"
           >{String.fromCharCode(65+idx)}. {op} {state.respuestas[room.selfId]===idx ? '✓' : ''}</button>
