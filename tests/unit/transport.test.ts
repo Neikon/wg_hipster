@@ -32,6 +32,15 @@ describe('transport', () => {
     for (const u of urls) expect(u.startsWith('stun:')).toBe(true)
   })
 
+  it('rtcConfig acepta TURN extra detrás de los STUN', () => {
+    const turn = [{ urls: 'turn:relevo:80', username: 'u', credential: 'p' }]
+    const rtc = buildRtcConfig(turn)
+    expect(rtc.iceServers!.length).toBe(STUN_URLS.length + 1)
+    expect(rtc.iceServers![STUN_URLS.length]).toEqual(turn[0])
+    const c = buildJoinConfig('wg_hipster_v1_abc123', turn)
+    expect(c.rtcConfig.iceServers).toContainEqual(turn[0])
+  })
+
   it('joinConfig conserva appId por sala', () => {
     const c = buildJoinConfig('wg_hipster_v1_abc123')
     expect(c.appId).toBe('wg_hipster_v1_abc123')

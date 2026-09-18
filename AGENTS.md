@@ -21,7 +21,7 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `src/components/{PlayerList,ShareLink,NameInput,KoFi}.svelte` — UI lobby + píldora ko-fi (landing/lobby/espera/resultados)
 - `src/app.css` + `src/lib/stores/theme.ts` + `src/components/ThemeToggle.svelte` — estilo festival póster dual (claro/oscuro según sistema + toggle persistido)
 - `src/lib/game/hipster/colores.ts` — color dinámico de carátula (Canvas + contraste WCAG AA, store `tinteActual`)
-- `src/lib/net/{types,trysteroAdapter,room,transport}.ts` — `Msg`, adapter Trystero (`appId='wg_hipster_v1_'+salaId`, 4 trackers verificados 2026-09-09, 5 STUN), `electNewHost`/`isRoomFull`, `relayStatus()` (sockets trackers); `scripts/patch-trystero.js` (postinstall) corrige la fuga del offer pool de trystero 0.20.1 (40 RTCPeerConnection fugadas por ciclo → sala fantasma a los minutos); hooks solo-e2e vía query del hash: `transport.trackerUrls()` acepta `?tracker=ws://…` (repetible) y el adapter `?lagMs=&lossPct=` (móvil lento simulado)
+- `src/lib/net/{types,trysteroAdapter,room,transport,turn}.ts` — `Msg`, adapter Trystero (`appId='wg_hipster_v1_'+salaId`, 4 trackers verificados 2026-09-09, 5 STUN + TURN opcional vía `turn.ts` para NAT simétrica de datos móviles), `electNewHost`/`isRoomFull`, `relayStatus()` (sockets trackers); `scripts/patch-trystero.js` (postinstall) corrige la fuga del offer pool de trystero 0.20.1 (40 RTCPeerConnection fugadas por ciclo → sala fantasma a los minutos); hooks solo-e2e vía query del hash: `transport.trackerUrls()` acepta `?tracker=ws://…` (repetible) y el adapter `?lagMs=&lossPct=` (móvil lento simulado)
 - `src/lib/net/syncEngine.ts` — `SyncNode`: protocolo P2P (hello+eco/requestState/stateSync/action/rename, heartbeat 2 s, tick 1 s, migración de host); el invitado se incluye desde el inicio, reintenta sync y emite `synced`
 - `src/lib/stores/{roomStore,gameStore}.ts` — `roomStore` (sala/peers/joinOrder/isHost) + `gameStore` (aplica `stateSync` solo si versión mayor)
 - `src/lib/game/{types,registry}.ts` — contrato `GameModule` y registry dinámico por `juegoId`
@@ -30,13 +30,13 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 - `vite.config.ts` — `base=VITE_BASE || '/wg_hipster/'`, `server/preview` con `host:true, strictPort:true` (devcontainer)
 - `.devcontainer/devcontainer.json` + `post-create.sh` — imagen `typescript-node:22`, puertos 5173/4173
 - `.github/workflows/pages.yml` — build (`VITE_BASE=/wg_hipster/`) + `deploy-pages@v4`
-- `tests/unit/` — 79 tests (hipster 31, salaN 10, rondaRobusta 3, robustez+transporte 6+1, nombres 7, tema 2, colores 6, qr 2); `tests/e2e/` — 21 casos: P2P real 2 contextos + `multijugador.spec.ts` (salas P2P reales 5/10/15/20 escalonado + 15 en ráfaga + 8 con mitad lenta vía tracker local `bittorrent-tracker` devDep, con aserción `Señalización: 1/1`; `E2E_PUBLIC` usa trackers de producción bajo demanda; `E2E_AGE_MIN`/`E2E_AGE_N` opt-in para sala envejecida + tardío (caza sala fantasma); vars `E2E_PEERS`, `E2E_BURST`, `E2E_SLOW`, `E2E_PUBLIC`, `E2E_JOIN_GAP_MS`, `E2E_CONVERGE_MS`, `E2E_LAG_MS`, `E2E_LOSS_PCT`, `E2E_SLOW_HOST`; nota: 3 de los 6 trackers públicos fallan —btorrent.xyz, webtorrent.io, files.fm— y la redundancia lo absorbe)
+- `tests/unit/` — 87 tests (hipster 31, salaN 10, rondaRobusta 3, robustez+transporte 6+2, turn 7, nombres 7, tema 2, colores 6, qr 2); `tests/e2e/` — 21 casos: P2P real 2 contextos + `multijugador.spec.ts` (salas P2P reales 5/10/15/20 escalonado + 15 en ráfaga + 8 con mitad lenta vía tracker local `bittorrent-tracker` devDep, con aserción `Señalización: 1/1`; `E2E_PUBLIC` usa trackers de producción bajo demanda; `E2E_AGE_MIN`/`E2E_AGE_N` opt-in para sala envejecida + tardío (caza sala fantasma); vars `E2E_PEERS`, `E2E_BURST`, `E2E_SLOW`, `E2E_PUBLIC`, `E2E_JOIN_GAP_MS`, `E2E_CONVERGE_MS`, `E2E_LAG_MS`, `E2E_LOSS_PCT`, `E2E_SLOW_HOST`; nota: 3 de los 6 trackers públicos fallan —btorrent.xyz, webtorrent.io, files.fm— y la redundancia lo absorbe)
 ## Comandos (Node 22)
 
 ```bash
 npm ci            # instalar (postCreate del devcontainer ya lo hace)
 npm run dev       # http://localhost:5173
-npm run test      # vitest run (79 tests)
+npm run test      # vitest run (87 tests)
 npm run check     # svelte-check + tsc
 npm run build     # dist/ para Pages
 npm run test:e2e  # Playwright; E2E_P2P=1 hace obligatorio el caso de trackers

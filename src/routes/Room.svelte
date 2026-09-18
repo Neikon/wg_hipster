@@ -4,6 +4,7 @@
   import { gameStore } from '../lib/stores/gameStore'
   import { randomName, sanitizeName } from '../lib/utils/names'
   import { joinTrystero, relayStatus } from '../lib/net/trysteroAdapter'
+  import { readTurnServers, refreshTurnServers, turnApiUrl, guardarTurnApi, type TurnServer } from '../lib/net/turn'
   import { SyncNode } from '../lib/net/syncEngine'
   import type { SyncEvent } from '../lib/net/syncEngine'
   import { DEFAULT_GAME_ID, getGameModule } from '../lib/game/registry'
@@ -38,6 +39,26 @@
   let salaFull = false
   let toast = ''
   let secondInt: any = null
+  let watch: any = null
+  // TURN (datos móviles): URL del endpoint + estado para el lobby.
+  let turnApiTxt = ''
+  let turnMsg = ''
+  let turnCount = 0
+  function guardarTurn() {
+    if (guardarTurnApi(turnApiTxt)) {
+      turnMsg = 'URL guardada; obteniendo servidores…'
+      refreshTurnServers()
+        .then((list) => {
+          turnCount = list.length > 0 ? list.length : readTurnServers().length
+          turnMsg = turnCount > 0 ? `TURN activo (${turnCount} servidores). Recarga la sala para usarlo.` : 'Sin respuesta del endpoint; revisa la URL.'
+        })
+        .catch(() => {
+          turnMsg = 'Sin respuesta del endpoint; revisa la URL.'
+        })
+    } else {
+      turnMsg = 'La URL debe empezar por https://'
+    }
+  }
   // Conexión: el invitado muestra "Conectando" hasta su primer sync.
   let synced = false
   let joinedAt = 0
@@ -110,8 +131,10 @@
     rejoining = true
     showToast(motivo)
     try { trystero?.leave() } catch {}
+    // el rejoin recoge TURN recién cacheados (el refresco corre en fondo)
+    refreshTurnServers().catch(() => {})
     try {
-      trystero = joinTrystero(salaId)
+      trystero = joinTrystero(salaId, readTurnServers())
       wireTransport()
       node.start()
     } catch {
@@ -136,6 +159,9 @@
   onMount(()=>{
     parseHash()
     if (!salaId) { location.hash = '#/'; return }
+    let cancelled = false
+    turnApiTxt = turnApiUrl() ?? ''
+    turnCount = readTurnServers().length
     // el id recién parseado manda: la suscripción al store dispara primero con
     // datos de una sala anterior y no debe pisarlo (ver roadmap punto 4)
     const freshSalaId = salaId
@@ -170,9 +196,24 @@
       gameState = { phase: 'lobby', version: 0, gameId: juegoId }
     }
 
+    // La entrada es async (TURN puede esperar ≤4 s); el cleanup va por `release`
+    // porque onMount sync no puede devolver lo de dentro de la promesa.
+    let release: (() => void) | undefined
+    const entrar = async () => {
+    // TURN (datos móviles): lectura síncrona de caché; si hay API configurada
+    // pero nada cacheado, se espera al refresco (≤4 s). Sin TURN, inmediato.
+    refreshTurnServers().catch(() => {})
+    let turn: TurnServer[] = readTurnServers()
+    if (turn.length === 0 && turnApiUrl()) {
+      showToast('Obteniendo TURN…')
+      turn = await refreshTurnServers().catch(() => [] as TurnServer[])
+      turnCount = readTurnServers().length
+    }
+    if (cancelled) return
+
     // conectar Trystero
     try {
-      trystero = joinTrystero(freshSalaId)
+      trystero = joinTrystero(freshSalaId, turn)
     } catch(e){
       console.error('Trystero error', e)
       showToast('Error conectando P2P')
@@ -222,7 +263,7 @@
     const reloadsHechas = () => {
       try { return parseInt(sessionStorage.getItem(reloadKey) || '0', 10) || 0 } catch { return MAX_HARD_RELOADS }
     }
-    const watch = setInterval(()=>{
+    watch = setInterval(()=>{
       if (!node) return
       const snap = node.snapshot()
       if (!snap.isHost && !snap.syncedOnce && Date.now() - joinedAt > REJOIN_MS) {
@@ -235,9 +276,15 @@
       }
     }, 2000)
 
-    return ()=>{
-      clearInterval(watch)
+    release = ()=>{
+      if (watch) clearInterval(watch)
       if (trystero) trystero.leave()
+    }
+    }
+    void entrar()
+    return ()=>{
+      cancelled = true
+      release?.()
     }
   })
 
@@ -247,6 +294,7 @@
     unsubTinte()
     tinteActual.set(null)
     if (secondInt) clearInterval(secondInt)
+    if (watch) clearInterval(watch)
     if (trystero) trystero.leave()
   })
 
@@ -318,6 +366,15 @@
         <button on:click={()=>location.reload()} style="background:white;color:var(--error);padding:0.3rem 0.7rem;font-size:0.85rem">Recargar</button>
       </div>
     {/if}
+    <details style="margin-top:0.6rem;font-size:0.85rem">
+      <summary class="muted" style="cursor:pointer">Datos móviles: TURN ({turnCount} activos)</summary>
+      <p class="muted">Con datos, el UDP directo a veces no cruza y nadie entra aunque haya señalización. Pega tu URL de credenciales TURN (Metered, gratis) y se usará al entrar.</p>
+      <div style="display:flex;gap:0.4rem">
+        <input bind:value={turnApiTxt} placeholder="https://….metered.live/api/v1/turn/credentials?apiKey=…" aria-label="URL de credenciales TURN" style="flex:1;min-width:0" />
+        <button on:click={guardarTurn} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Guardar</button>
+      </div>
+      {#if turnMsg}<p class="muted">{turnMsg}</p>{/if}
+    </details>
   {:else}
     <!-- ============ JUEGO ============ -->
     <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.8rem">

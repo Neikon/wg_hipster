@@ -47,11 +47,11 @@ export const STUN_URLS: readonly string[] = [
   'stun:openrelay.metered.ca:80'
 ]
 
-export function buildRtcConfig(): RTCConfiguration {
-  return { iceServers: STUN_URLS.map((urls) => ({ urls })) }
+export function buildRtcConfig(extraIceServers: RTCIceServer[] = []): RTCConfiguration {
+  return { iceServers: [...STUN_URLS.map((urls) => ({ urls })), ...extraIceServers] }
 }
 
-export function buildJoinConfig(appId: string): {
+export function buildJoinConfig(appId: string, turnServers: RTCIceServer[] = []): {
   appId: string
   relayUrls: string[]
   relayRedundancy: number
@@ -62,6 +62,6 @@ export function buildJoinConfig(appId: string): {
     appId,
     relayUrls,
     relayRedundancy: Math.min(RELAY_REDUNDANCY, relayUrls.length),
-    rtcConfig: buildRtcConfig()
+    rtcConfig: buildRtcConfig(turnServers)
   }
 }
