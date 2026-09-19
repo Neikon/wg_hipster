@@ -5,7 +5,7 @@
   import { randomName, sanitizeName } from '../lib/utils/names'
   import { joinTrystero, relayStatus } from '../lib/net/trysteroAdapter'
   import { readTurnServers, refreshTurnServers, turnApiUrl, guardarTurnApi, type TurnServer } from '../lib/net/turn'
-  import { debugLog, downloadText } from '../lib/net/debug'
+  import { debugLog, downloadText, installConsoleCapture } from '../lib/net/debug'
   import { diagnosticarRed } from '../lib/net/iceCheck'
   import { buildRtcConfig } from '../lib/net/transport'
   import { SyncNode } from '../lib/net/syncEngine'
@@ -67,9 +67,33 @@
   let debug = false
   let debugTexto = ''
   $: debugCount = debugTexto ? debugTexto.split('\n').length : 0
+  let desinstalarConsola: (() => void) | null = null
+  let aVisibilidad: (() => void) | null = null
+  let aOnline: (() => void) | null = null
+  let aOffline: (() => void) | null = null
+  function limpiarDebug(){
+    try {
+      if (aVisibilidad) document.removeEventListener('visibilitychange', aVisibilidad)
+      if (aOnline) window.removeEventListener('online', aOnline)
+      if (aOffline) window.removeEventListener('offline', aOffline)
+    } catch { /* limpieza best-effort */ }
+    try {
+      desinstalarConsola?.()
+    } catch { /* limpieza best-effort */ }
+    aVisibilidad = aOnline = aOffline = null
+    desinstalarConsola = null
+    debugLog.disable()
+  }
   let relaysPrev = new Map<string, boolean>()
   function uaCorta(): string {
     try { return navigator.userAgent } catch { return 'sin-UA' }
+  }
+  function buildId(): string {
+    try {
+      return typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'sin-build'
+    } catch {
+      return 'sin-build'
+    }
   }
   let synced = false
   let joinedAt = 0
@@ -200,9 +224,24 @@
     if (debug) {
       let recargas = 0
       try { recargas = parseInt(sessionStorage.getItem(`wg_hipster:reloads:${salaId}`) || '0', 10) || 0 } catch { /* sin storage */ }
-      debugLog.enable({ sala: salaId, rol: isHostParam ? 'host' : 'invitado', ua: uaCorta(), recargasDuras: String(recargas) })
-      // Chequeo automático al entrar en debug: así el log exportado trae
-      // siempre el veredicto de red sin depender de que se pulse el botón.
+      debugLog.enable({ sala: salaId, rol: isHostParam ? 'host' : 'invitado', ua: uaCorta(), build: buildId(), recargasDuras: String(recargas) })
+      desinstalarConsola = installConsoleCapture()
+      // En móvil la app en segundo plano congela timers/sockets: si el host
+      // bloquea el móvil, sus anuncios mueren y la sala se vacía. Registrarlo.
+      aVisibilidad = () => {
+        try {
+          debugLog.log('sys', `visibilidad: ${document.visibilityState}`)
+        } catch { /* log best-effort */ }
+      }
+      aOnline = () => debugLog.log('red', 'red: online')
+      aOffline = () => debugLog.log('red', 'red: OFFLINE')
+      try {
+        document.addEventListener('visibilitychange', aVisibilidad)
+        window.addEventListener('online', aOnline)
+        window.addEventListener('offline', aOffline)
+        debugLog.log('sys', `visibilidad inicial: ${document.visibilityState}`)
+      } catch { /* listeners best-effort */ }
+      // Chequeo automático al entrar en debug: el log trae siempre el veredicto.
       void probarRed()
     }
     turnApiTxt = turnApiUrl() ?? ''
@@ -329,6 +368,7 @@
     }, 2000)
 
     release = ()=>{
+      limpiarDebug()
       if (watch) clearInterval(watch)
       if (trystero) trystero.leave()
     }
@@ -341,6 +381,7 @@
   })
 
   onDestroy(()=>{
+    limpiarDebug()
     if (unsubRoom) unsubRoom()
     if (unsubGame) unsubGame()
     unsubTinte()

@@ -34,3 +34,32 @@ describe('debug', () => {
     expect(typeof downloadText).toBe('function')
   })
 })
+
+describe('debug captura', () => {
+  it('colapsa repeticiones seguidas (×N)', async () => {
+    const { debugLog: dl, installConsoleCapture } = await import('../../src/lib/net/debug')
+    dl.enable({ sala: 'x' })
+    const stop = installConsoleCapture()
+    try {
+      console.warn('aviso repetido')
+      console.warn('aviso repetido')
+      console.warn('otro')
+      expect(dl.tail(2)).toContain('aviso repetido (×2)')
+      expect(dl.tail(1)).toContain('otro')
+      stop()
+      console.warn('aviso repetido')
+      expect(dl.tail(1)).toContain('otro')
+    } finally {
+      stop()
+    }
+  })
+
+  it('disable() silencia el log', async () => {
+    const { debugLog: dl } = await import('../../src/lib/net/debug')
+    dl.enable({ sala: 'x' })
+    dl.disable()
+    dl.log('sys', 'nada')
+    expect(dl.tail(10)).not.toContain('nada')
+    dl.enable({ sala: 'x' })
+  })
+})
