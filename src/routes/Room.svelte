@@ -6,6 +6,8 @@
   import { joinTrystero, relayStatus } from '../lib/net/trysteroAdapter'
   import { readTurnServers, refreshTurnServers, turnApiUrl, guardarTurnApi, type TurnServer } from '../lib/net/turn'
   import { debugLog, downloadText } from '../lib/net/debug'
+  import { diagnosticarRed } from '../lib/net/iceCheck'
+  import { buildRtcConfig } from '../lib/net/transport'
   import { SyncNode } from '../lib/net/syncEngine'
   import type { SyncEvent } from '../lib/net/syncEngine'
   import { DEFAULT_GAME_ID, getGameModule } from '../lib/game/registry'
@@ -381,6 +383,25 @@
     showToast(ok ? 'Log descargado' : 'No se pudo descargar')
   }
 
+  /** Chequeo activo de red: reúne candidatos ICE y vuelca el veredicto al log. */
+  async function probarRed(){
+    showToast('Probando red…')
+    debugLog.log('sys', 'chequeo ICE iniciado')
+    const v = await diagnosticarRed(buildRtcConfig(readTurnServers())).catch(() => null)
+    if (!v) {
+      showToast('Chequeo no disponible')
+      return
+    }
+    debugLog.log('sys', `ICE host=[${v.host.join(',') || '—'}] srflx=[${v.srflx.join(',') || '—'}] relay=[${v.relay.join(',') || '—'}] => ${v.veredicto}`)
+    showToast(
+      v.veredicto === 'P2P_OK'
+        ? 'Red OK para P2P'
+        : v.veredicto === 'SOLO_TURN'
+          ? 'P2P solo con TURN'
+          : 'Red NO apta para P2P directo'
+    )
+  }
+
   /** Activa el modo debug recargando con &debug=1 (instrumenta desde el join).
    *  El router solo remonta por salaId, así que sin recarga no tendría efecto. */
   function activarDebug(){
@@ -459,9 +480,10 @@
     {#if debug}
       <details style="margin-top:0.6rem;font-size:0.85rem">
         <summary class="muted" style="cursor:pointer">Registro de depuración ({debugCount} líneas)</summary>
-        <div style="display:flex;gap:0.4rem;margin:0.4rem 0">
+        <div style="display:flex;gap:0.4rem;margin:0.4rem 0;flex-wrap:wrap">
           <button on:click={copiarLog} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Copiar</button>
           <button on:click={descargarLog} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Descargar</button>
+          <button on:click={()=>void probarRed()} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Probar mi red</button>
         </div>
         <pre style="max-height:220px;overflow:auto;background:var(--bg);border:1px solid var(--muted);border-radius:8px;padding:0.5rem;font-size:0.75rem;white-space:pre-wrap;overflow-wrap:anywhere">{debugTexto}</pre>
       </details>
