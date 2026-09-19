@@ -132,7 +132,10 @@
     } else if (e.t === 'synced') {
       synced = true
       rejoining = false
-      debugLog.log('sala', `sincronizado (peers=${peers.length})`)
+      try {
+        const n = node?.snapshot().peers.length ?? peers.length
+        debugLog.log('sala', `sincronizado (peers=${n})`)
+      } catch { /* log best-effort */ }
       try { sessionStorage.removeItem(`wg_hipster:reloads:${salaId}`) } catch {}
     }
   }
