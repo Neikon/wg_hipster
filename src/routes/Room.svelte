@@ -201,6 +201,9 @@
       let recargas = 0
       try { recargas = parseInt(sessionStorage.getItem(`wg_hipster:reloads:${salaId}`) || '0', 10) || 0 } catch { /* sin storage */ }
       debugLog.enable({ sala: salaId, rol: isHostParam ? 'host' : 'invitado', ua: uaCorta(), recargasDuras: String(recargas) })
+      // Chequeo automático al entrar en debug: así el log exportado trae
+      // siempre el veredicto de red sin depender de que se pulse el botón.
+      void probarRed()
     }
     turnApiTxt = turnApiUrl() ?? ''
     turnCount = readTurnServers().length
