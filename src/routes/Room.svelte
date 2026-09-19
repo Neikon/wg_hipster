@@ -378,6 +378,15 @@
     showToast(ok ? 'Log descargado' : 'No se pudo descargar')
   }
 
+  /** Activa el modo debug recargando con &debug=1 (instrumenta desde el join).
+   *  El router solo remonta por salaId, así que sin recarga no tendría efecto. */
+  function activarDebug(){
+    const h = location.hash
+    if (/[?&]debug=1/.test(h)) return
+    location.hash = h.includes('?') ? `${h}&debug=1` : `${h}?debug=1`
+    location.reload()
+  }
+
   let tinte: Tinte | null = null
   let tinteCard = ''
   let tinteTextoTarjeta = ''
@@ -423,7 +432,11 @@
     <ShareLink {salaId} {juegoId} />
 
     {#if relaysTotal > 0}
-      <p class="muted" style="font-size:0.8rem;margin:0.4rem 0 0">Señalización: {relaysAbiertos}/{relaysTotal} trackers</p>
+      <p class="muted" style="font-size:0.8rem;margin:0.4rem 0 0">Señalización: {relaysAbiertos}/{relaysTotal} trackers
+        {#if !debug}
+          <button on:click={activarDebug} style="background:none;border:none;padding:0 0 0 0.4rem;margin:0;min-height:0;font-size:0.8rem;font-weight:400;color:var(--muted);text-decoration:underline;cursor:pointer">depurar</button>
+        {/if}
+      </p>
     {/if}
     {#if isHost && relaysTotal > 0 && relaysAbiertos === 0 && ahora - joinedAt > SIN_SENAL_MS}
       <div style="background:var(--error);color:white;padding:0.6rem 1rem;border-radius:8px;margin:0.6rem 0;display:flex;gap:0.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
