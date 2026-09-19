@@ -5,6 +5,7 @@
   import { randomName, sanitizeName } from '../lib/utils/names'
   import { joinTrystero, relayStatus } from '../lib/net/trysteroAdapter'
   import { readTurnServers, refreshTurnServers, turnApiUrl, guardarTurnApi, type TurnServer } from '../lib/net/turn'
+  import { debugLog, downloadText } from '../lib/net/debug'
   import { SyncNode } from '../lib/net/syncEngine'
   import type { SyncEvent } from '../lib/net/syncEngine'
   import { DEFAULT_GAME_ID, getGameModule } from '../lib/game/registry'
@@ -60,6 +61,14 @@
     }
   }
   // Conexión: el invitado muestra "Conectando" hasta su primer sync.
+  // Depuración (?debug=1): registro exportable de red+protocolo.
+  let debug = false
+  let debugTexto = ''
+  $: debugCount = debugTexto ? debugTexto.split('\n').length : 0
+  let relaysPrev = new Map<string, boolean>()
+  function uaCorta(): string {
+    try { return navigator.userAgent } catch { return 'sin-UA' }
+  }
   let synced = false
   let joinedAt = 0
   let rejoining = false
@@ -79,6 +88,13 @@
       const st = relayStatus()
       relaysTotal = st.length
       relaysAbiertos = st.filter((s)=>s.open).length
+      for (const s of st) {
+        const antes = relaysPrev.get(s.url)
+        if (antes !== undefined && antes !== s.open) {
+          debugLog.log('red', `tracker ${s.open ? 'abierto' : 'CERRADO'}: ${s.url}`)
+        }
+        relaysPrev.set(s.url, s.open)
+      }
     } catch { /* sin red: se reintenta en el siguiente tick */ }
   }
 
@@ -89,6 +105,7 @@
     const q = new URLSearchParams(hash.split('?')[1] || '')
     isHostParam = q.get('host') === '1'
     initialName = q.get('name') ? decodeURIComponent(q.get('name')!) : ''
+    debug = q.get('debug') === '1'
     const j = q.get('juego')
     if (j && getGameModule(j)) juegoId = j
     const seg = parseInt(q.get('segundos') || '', 10)
@@ -111,18 +128,31 @@
       showToast(e.msg)
     } else if (e.t === 'salaFull') {
       salaFull = true
+      debugLog.log('sala', 'sala llena')
     } else if (e.t === 'synced') {
       synced = true
       rejoining = false
+      debugLog.log('sala', `sincronizado (peers=${peers.length})`)
       try { sessionStorage.removeItem(`wg_hipster:reloads:${salaId}`) } catch {}
     }
   }
 
   function wireTransport(){
     if (!trystero || !node) return
-    trystero.get((msg:any, peerId:string)=> node?.receive(msg, peerId))
-    trystero.onPeerJoin((id:string)=> node?.peerJoined(id))
-    trystero.onPeerLeave((transportPeerId:string)=> node?.peerLeft(transportPeerId))
+    trystero.get((msg:any, peerId:string)=> {
+      try {
+        debugLog.log('proto', `← ${msg?.t ?? '?'} de ${peerId} (${JSON.stringify(msg ?? null).length}B)`)
+      } catch { /* log best-effort */ }
+      node?.receive(msg, peerId)
+    })
+    trystero.onPeerJoin((id:string)=> {
+      debugLog.log('red', `peer transporte unido: ${id}`)
+      node?.peerJoined(id)
+    })
+    trystero.onPeerLeave((transportPeerId:string)=> {
+      debugLog.log('red', `peer transporte fuera: ${transportPeerId}`)
+      node?.peerLeft(transportPeerId)
+    })
   }
 
   /** Reconexión: salir y volver a entrar para re-anunciarse en los trackers. */
@@ -130,6 +160,7 @@
     if (!node || rejoining) return
     rejoining = true
     showToast(motivo)
+    debugLog.log('red', `reconexión: ${motivo}`)
     try { trystero?.leave() } catch {}
     // el rejoin recoge TURN recién cacheados (el refresco corre en fondo)
     refreshTurnServers().catch(() => {})
@@ -153,6 +184,7 @@
       node?.tickSecond()
       actualizarRelays()
       ahora = Date.now()
+      if (debug) debugTexto = debugLog.tail(80)
     }, 1000)
   }
 
@@ -160,6 +192,11 @@
     parseHash()
     if (!salaId) { location.hash = '#/'; return }
     let cancelled = false
+    if (debug) {
+      let recargas = 0
+      try { recargas = parseInt(sessionStorage.getItem(`wg_hipster:reloads:${salaId}`) || '0', 10) || 0 } catch { /* sin storage */ }
+      debugLog.enable({ sala: salaId, rol: isHostParam ? 'host' : 'invitado', ua: uaCorta(), recargasDuras: String(recargas) })
+    }
     turnApiTxt = turnApiUrl() ?? ''
     turnCount = readTurnServers().length
     // el id recién parseado manda: la suscripción al store dispara primero con
@@ -230,7 +267,12 @@
       juegoId,
       initialGameState: gameState,
       getGameModule: (id: string) => getGameModule(id),
-      send: (msg: any) => trystero.send(msg),
+      send: (msg: any) => {
+        try {
+          debugLog.log('proto', `→ ${msg?.t ?? '?'} (${JSON.stringify(msg ?? null).length}B)`)
+        } catch { /* log best-effort */ }
+        trystero.send(msg)
+      },
       emit: onSyncEvent
     })
     {
@@ -247,6 +289,7 @@
 
     // el invitado pide estado al entrar; si tarda, el nodo reintenta solo
     node?.start()
+    debugLog.log('proto', isHostParam ? 'host listo' : 'requestState inicial')
     joinedAt = Date.now()
     actualizarRelays()
 
@@ -272,6 +315,7 @@
         reconectar('Sin señalización, reintentando…')
       } else if (!snap.isHost && !snap.syncedOnce && Date.now() - joinedAt > HARD_RELOAD_MS && reloadsHechas() < MAX_HARD_RELOADS) {
         try { sessionStorage.setItem(reloadKey, String(reloadsHechas() + 1)) } catch {}
+        debugLog.log('sys', 'recarga dura por falta de sync')
         location.reload()
       }
     }, 2000)
@@ -311,6 +355,27 @@
   function salir(){
     if (trystero) trystero.leave()
     location.hash = '#/'
+  }
+
+  function copiarLog(){
+    const txt = debugLog.toText()
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(txt).then(
+          () => showToast('Log copiado'),
+          () => showToast('No se pudo copiar')
+        )
+      } else {
+        showToast('Portapapeles no disponible')
+      }
+    } catch {
+      showToast('No se pudo copiar')
+    }
+  }
+
+  function descargarLog(){
+    const ok = downloadText(`wg_hipster-${salaId}.log`, debugLog.toText())
+    showToast(ok ? 'Log descargado' : 'No se pudo descargar')
   }
 
   let tinte: Tinte | null = null
@@ -375,6 +440,16 @@
       </div>
       {#if turnMsg}<p class="muted">{turnMsg}</p>{/if}
     </details>
+    {#if debug}
+      <details style="margin-top:0.6rem;font-size:0.85rem">
+        <summary class="muted" style="cursor:pointer">Registro de depuración ({debugCount} líneas)</summary>
+        <div style="display:flex;gap:0.4rem;margin:0.4rem 0">
+          <button on:click={copiarLog} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Copiar</button>
+          <button on:click={descargarLog} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Descargar</button>
+        </div>
+        <pre style="max-height:220px;overflow:auto;background:var(--bg);border:1px solid var(--muted);border-radius:8px;padding:0.5rem;font-size:0.75rem;white-space:pre-wrap;overflow-wrap:anywhere">{debugTexto}</pre>
+      </details>
+    {/if}
   {:else}
     <!-- ============ JUEGO ============ -->
     <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.8rem">
