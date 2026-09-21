@@ -6,7 +6,7 @@
   import { joinTrystero, relayStatus } from '../lib/net/trysteroAdapter'
   import { readTurnServers, refreshTurnServers, turnApiUrl, guardarTurnApi, type TurnServer } from '../lib/net/turn'
   import { signalingStrategy, guardarEstrategia, supaConf, guardarSupa, type Estrategia } from '../lib/net/signaling'
-  import { debugLog, downloadText, installConsoleCapture } from '../lib/net/debug'
+  import { debugLog, downloadText, installConsoleCapture, installBroadcastProbe, necesitaReanuncio } from '../lib/net/debug'
   import { diagnosticarRed } from '../lib/net/iceCheck'
   import { buildRtcConfig } from '../lib/net/transport'
   import { SyncNode } from '../lib/net/syncEngine'
@@ -86,6 +86,8 @@
   let debugTexto = ''
   $: debugCount = debugTexto ? debugTexto.split('\n').length : 0
   let desinstalarConsola: (() => void) | null = null
+  let desinstalarSonda: (() => void) | null = null
+  let ocultoDesde: number | null = null
   let aVisibilidad: (() => void) | null = null
   let aOnline: (() => void) | null = null
   let aOffline: (() => void) | null = null
@@ -97,9 +99,12 @@
     } catch { /* limpieza best-effort */ }
     try {
       desinstalarConsola?.()
+      desinstalarSonda?.()
     } catch { /* limpieza best-effort */ }
     aVisibilidad = aOnline = aOffline = null
     desinstalarConsola = null
+    desinstalarSonda = null
+    ocultoDesde = null
     debugLog.disable()
   }
   let relaysPrev = new Map<string, boolean>()
@@ -248,11 +253,24 @@
       try { recargas = parseInt(sessionStorage.getItem(`wg_hipster:reloads:${salaId}`) || '0', 10) || 0 } catch { /* sin storage */ }
       debugLog.enable({ sala: salaId, rol: isHostParam ? 'host' : 'invitado', ua: uaCorta(), build: buildId(), recargasDuras: String(recargas) })
       desinstalarConsola = installConsoleCapture()
+      desinstalarSonda = installBroadcastProbe()
       // En móvil la app en segundo plano congela timers/sockets: si el host
-      // bloquea el móvil, sus anuncios mueren y la sala se vacía. Registrarlo.
+      // bloquea el móvil, sus anuncios mueren y la sala se vacía. Registrarlo
+      // y, al volver tras >10 s, re-anunciarse (invitado siempre; host solo
+      // si está solo para no provocar migración con invitados dentro).
       aVisibilidad = () => {
         try {
           debugLog.log('sys', `visibilidad: ${document.visibilityState}`)
+          if (document.visibilityState === 'hidden') {
+            ocultoDesde = Date.now()
+          } else if (ocultoDesde !== null) {
+            const ms = Date.now() - ocultoDesde
+            ocultoDesde = null
+            if (necesitaReanuncio(ms, isHost, peers.length)) {
+              debugLog.log('sys', `vuelta de segundo plano tras ${Math.round(ms / 1000)}s: re-anuncio`)
+              void reconectar('Conexión pausada, reintentando…')
+            }
+          }
         } catch { /* log best-effort */ }
       }
       aOnline = () => debugLog.log('red', 'red: online')

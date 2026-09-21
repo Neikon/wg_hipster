@@ -63,3 +63,46 @@ describe('debug captura', () => {
     dl.enable({ sala: 'x' })
   })
 })
+
+describe('debug reanuncio y sonda', () => {
+  it('necesitaReanuncio: solo tras 10 s; host solo si está solo', async () => {
+    const { necesitaReanuncio } = await import('../../src/lib/net/debug')
+    expect(necesitaReanuncio(5000, false, 1)).toBe(false)
+    expect(necesitaReanuncio(15000, false, 1)).toBe(true)
+    expect(necesitaReanuncio(15000, true, 1)).toBe(true)
+    expect(necesitaReanuncio(15000, true, 3)).toBe(false)
+    expect(necesitaReanuncio(10000, false, 1)).toBe(true)
+  })
+
+  it('installBroadcastProbe registra solo broadcast y restaura', async () => {
+    const { debugLog: dl, installBroadcastProbe } = await import('../../src/lib/net/debug')
+    dl.enable({ sala: 'x' })
+    const llamadas: string[] = []
+    const fakeFetch = (async (input: any) => {
+      llamadas.push(String(input))
+      if (String(input).includes('/realtime/v1/api/broadcast')) return { status: 202 } as any
+      return { status: 200 } as any
+    }) as any
+    const realFetch = (globalThis as any).fetch
+    ;(globalThis as any).fetch = fakeFetch
+    const stop = installBroadcastProbe()
+    try {
+      await (globalThis as any).fetch('https://a.test/realtime/v1/api/broadcast', { method: 'POST' })
+      await (globalThis as any).fetch('https://a.test/otra', {})
+      expect(dl.tail(5)).toContain('broadcast POST -> 202')
+      expect(dl.tail(5)).not.toContain('otra')
+      // fallo de red se registra y se propaga
+      ;(globalThis as any).fetch = (async () => {
+        throw new Error('caído')
+      }) as any
+      const stop2 = installBroadcastProbe()
+      await expect((globalThis as any).fetch('https://a.test/realtime/v1/api/broadcast', {})).rejects.toThrow('caído')
+      expect(dl.tail(3)).toContain('broadcast POST FALLO')
+      stop2()
+    } finally {
+      stop()
+      ;(globalThis as any).fetch = realFetch
+      dl.enable({ sala: 'x' })
+    }
+  })
+})

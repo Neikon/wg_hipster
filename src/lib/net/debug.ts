@@ -77,6 +77,65 @@ class DebugLog {
 
 export const debugLog = new DebugLog()
 
+/**
+ * ¿Hay que re-anunciarse al volver de segundo plano? En móvil los timers y
+ * sockets mueren en segundo plano sin aviso: los anuncios cesan y nadie más
+ * entra. El invitado siempre puede reentrar; el host solo si está solo
+ * (con invitados dentro, un leave+rejoin provocaría migración de host).
+ */
+export function necesitaReanuncio(ocultoMs: number, esHost: boolean, numPeers: number): boolean {
+  if (ocultoMs < 10000) return false
+  if (!esHost) return true
+  return numPeers <= 1
+}
+
+/**
+ * Observa los POST de broadcast de Supabase (el fallback que usa Trystero) y
+ * registra su resultado. Sin esto, un 401/403/red caída en los anuncios es
+ * totalmente silencioso. Solo actúa sobre esa URL; el resto de fetch pasa
+ * intacto. Solo registra si el log está habilitado.
+ * Devuelve función para desinstalar.
+ */
+export function installBroadcastProbe(): () => void {
+  let orig: typeof fetch | null = null
+  try {
+    if (typeof globalThis === 'undefined' || typeof globalThis.fetch !== 'function') return () => {}
+    orig = globalThis.fetch.bind(globalThis)
+  } catch {
+    return () => {}
+  }
+  const real = orig
+  const envuelto = (async (input: any, init?: any) => {
+    let url = ''
+    try {
+      url = typeof input === 'string' ? input : input instanceof URL ? input.href : String(input?.url ?? '')
+    } catch {
+      url = ''
+    }
+    if (!url.includes('/realtime/v1/api/broadcast')) return real(input, init)
+    try {
+      const res = await real(input, init)
+      debugLog.log('red', `broadcast POST -> ${res.status}`)
+      return res
+    } catch (e) {
+      debugLog.log('red', `broadcast POST FALLO: ${e instanceof Error ? e.message : String(e).slice(0, 120)}`)
+      throw e
+    }
+  }) as typeof fetch
+  try {
+    ;(globalThis as any).fetch = envuelto
+  } catch {
+    return () => {}
+  }
+  return () => {
+    try {
+      ;(globalThis as any).fetch = real
+    } catch {
+      // restaurar es best-effort
+    }
+  }
+}
+
 type ConsoleFn = (...args: any[]) => void
 
 /**
