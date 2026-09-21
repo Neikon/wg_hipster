@@ -22,6 +22,14 @@ export const NET_KEY = 'wg_hipster:net'
 export const SUPA_URL_KEY = 'wg_hipster:supaUrl'
 export const SUPA_KEY_KEY = 'wg_hipster:supaKey'
 
+/**
+ * Proyecto Supabase por defecto (clave PUBLICABLE, diseñada para ir en el
+ * cliente; sin secreto que esconder). La elección explícita del jugador
+ * (?net=/localStorage) siempre manda sobre este defecto.
+ */
+export const DEFAULT_SUPA_URL = 'https://ruukiwjmzydizxtwpuhc.supabase.co'
+export const DEFAULT_SUPA_KEY = 'sb_publishable_iM82XA4F2OLHVIt5Dpi_bQ_sVr198bU'
+
 export interface SupaConf {
   url: string
   key: string
@@ -62,14 +70,14 @@ export function signalingStrategy(): Estrategia {
   if (q === 'torrent' || q === 'supabase') return q
   const guardada = leerLS(NET_KEY)
   if (guardada === 'torrent' || guardada === 'supabase') return guardada
-  return 'torrent'
+  return DEFAULT_SUPA_URL ? 'supabase' : 'torrent'
 }
 
 export function guardarEstrategia(e: Estrategia): boolean {
   return guardarLS(NET_KEY, e)
 }
 
-/** Config Supabase (`?supaUrl=&supaKey=` la persisten). null si incompleta. */
+/** Config Supabase (`?supaUrl=&supaKey=` la persisten). Por defecto, el proyecto común. */
 export function supaConf(): SupaConf | null {
   const q = hashQuery()
   const qUrl = q.get('supaUrl')
@@ -84,6 +92,7 @@ export function supaConf(): SupaConf | null {
   if (url && key && url.startsWith('https://')) return { url, key }
   // la query sola sin https también vale si venía completa (tests locales)
   if (qUrl && qKey) return { url: qUrl, key: qKey }
+  if (DEFAULT_SUPA_URL) return { url: DEFAULT_SUPA_URL, key: DEFAULT_SUPA_KEY }
   return null
 }
 
