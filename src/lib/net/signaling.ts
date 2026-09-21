@@ -8,7 +8,8 @@
  * - `supabase`: Supabase Realtime (broadcast). Los miembros re-anuncian su
  *   presencia cada ~5 s, así un tardío siempre encuentra a alguien en
  *   segundos. Requiere UN proyecto para todo el mundo (gratis): su URL y su
- *   clave pública `anon` (diseñada para ir en el cliente, sin secreto).
+ *   clave publicable (`sb_publishable_…`, diseñada para ir en el cliente;
+ *   la `anon` legacy también vale pero se jubila a finales de 2026).
  *
  * Selección: `?net=torrent|supabase` → localStorage `wg_hipster:net` →
  * defecto `torrent`. Config Supabase: `?supaUrl=&supaKey=` (se guardan) o

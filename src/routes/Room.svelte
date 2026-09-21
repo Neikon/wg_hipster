@@ -564,7 +564,7 @@
       {#if estrategia === 'supabase'}
         <div style="display:grid;gap:0.4rem">
           <input bind:value={supaUrlTxt} placeholder="https://xxx.supabase.co" aria-label="URL del proyecto Supabase" style="width:100%" />
-          <input bind:value={supaKeyTxt} placeholder="Clave pública anon" aria-label="Clave pública Supabase" style="width:100%" />
+          <input bind:value={supaKeyTxt} placeholder="Clave publicable (sb_publishable_…)" aria-label="Clave publicable Supabase" style="width:100%" />
           <div><button on:click={guardarSupaUI} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Guardar y recargar</button></div>
         </div>
       {/if}
