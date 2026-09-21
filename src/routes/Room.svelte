@@ -531,13 +531,12 @@
     <ShareLink {salaId} {juegoId} />
 
     {#if estrategia === 'torrent' && relaysTotal > 0}
-      <p class="muted" style="font-size:0.8rem;margin:0.4rem 0 0">Señalización: {relaysAbiertos}/{relaysTotal} trackers
-        {#if !debug}
-          <button on:click={activarDebug} style="background:none;border:none;padding:0 0 0 0.4rem;margin:0;min-height:0;font-size:0.8rem;font-weight:400;color:var(--muted);text-decoration:underline;cursor:pointer">depurar</button>
-        {/if}
-      </p>
+      <p class="muted" style="font-size:0.8rem;margin:0.4rem 0 0">Señalización: {relaysAbiertos}/{relaysTotal} trackers</p>
     {:else if estrategia === 'supabase'}
       <p class="muted" style="font-size:0.8rem;margin:0.4rem 0 0">Señalización: Supabase</p>
+    {/if}
+    {#if !debug}
+      <p style="margin:0.2rem 0 0"><button on:click={activarDebug} style="background:none;border:none;padding:0;margin:0;min-height:0;font-size:0.8rem;font-weight:400;color:var(--muted);text-decoration:underline;cursor:pointer">depurar</button></p>
     {/if}
     {#if isHost && estrategia === 'torrent' && relaysTotal > 0 && relaysAbiertos === 0 && ahora - joinedAt > SIN_SENAL_MS}
       <div style="background:var(--error);color:white;padding:0.6rem 1rem;border-radius:8px;margin:0.6rem 0;display:flex;gap:0.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
