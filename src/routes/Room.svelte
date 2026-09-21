@@ -5,6 +5,7 @@
   import { randomName, sanitizeName } from '../lib/utils/names'
   import { joinTrystero, relayStatus } from '../lib/net/trysteroAdapter'
   import { readTurnServers, refreshTurnServers, turnApiUrl, guardarTurnApi, type TurnServer } from '../lib/net/turn'
+  import { signalingStrategy, guardarEstrategia, supaConf, guardarSupa, type Estrategia } from '../lib/net/signaling'
   import { debugLog, downloadText, installConsoleCapture } from '../lib/net/debug'
   import { diagnosticarRed } from '../lib/net/iceCheck'
   import { buildRtcConfig } from '../lib/net/transport'
@@ -43,7 +44,24 @@
   let toast = ''
   let secondInt: any = null
   let watch: any = null
+  // Estrategia de señalización (torrent por defecto; supabase si hay config).
+  let estrategia: Estrategia = 'torrent'
   // TURN (datos móviles): URL del endpoint + estado para el lobby.
+  let supaUrlTxt = ''
+  let supaKeyTxt = ''
+  let supaMsg = ''
+  function guardarEstrategiaUI(e: Estrategia) {
+    estrategia = e
+    guardarEstrategia(e)
+    showToast(e === 'supabase' ? 'Señalización: Supabase (recarga la sala para usarla)' : 'Señalización: trackers')
+  }
+  function guardarSupaUI() {
+    if (guardarSupa(supaUrlTxt, supaKeyTxt)) {
+      location.reload()
+    } else {
+      supaMsg = 'Revisa URL (https://…) y clave (mín. 10 caracteres).'
+    }
+  }
   let turnApiTxt = ''
   let turnMsg = ''
   let turnCount = 0
@@ -185,7 +203,7 @@
   }
 
   /** Reconexión: salir y volver a entrar para re-anunciarse en los trackers. */
-  function reconectar(motivo: string){
+  async function reconectar(motivo: string){
     if (!node || rejoining) return
     rejoining = true
     showToast(motivo)
@@ -194,7 +212,7 @@
     // el rejoin recoge TURN recién cacheados (el refresco corre en fondo)
     refreshTurnServers().catch(() => {})
     try {
-      trystero = joinTrystero(salaId, readTurnServers())
+      trystero = await joinTrystero(salaId, readTurnServers(), estrategia, supaConf())
       wireTransport()
       node.start()
     } catch {
@@ -221,6 +239,10 @@
     parseHash()
     if (!salaId) { location.hash = '#/'; return }
     let cancelled = false
+    estrategia = signalingStrategy()
+    try {
+      if (new URLSearchParams(location.hash.split('?')[1] || '').get('net')) guardarEstrategia(estrategia)
+    } catch { /* persistencia best-effort */ }
     if (debug) {
       let recargas = 0
       try { recargas = parseInt(sessionStorage.getItem(`wg_hipster:reloads:${salaId}`) || '0', 10) || 0 } catch { /* sin storage */ }
@@ -246,6 +268,9 @@
     }
     turnApiTxt = turnApiUrl() ?? ''
     turnCount = readTurnServers().length
+    const supaGuardada = supaConf()
+    supaUrlTxt = supaGuardada?.url ?? ''
+    supaKeyTxt = supaGuardada?.key ?? ''
     // el id recién parseado manda: la suscripción al store dispara primero con
     // datos de una sala anterior y no debe pisarlo (ver roadmap punto 4)
     const freshSalaId = salaId
@@ -293,11 +318,17 @@
       turn = await refreshTurnServers().catch(() => [] as TurnServer[])
       turnCount = readTurnServers().length
     }
+    const supa = estrategia === 'supabase' ? supaConf() : null
+    if (estrategia === 'supabase' && !supa) {
+      showToast('Sin config Supabase: se usa trackers')
+      debugLog.log('sys', 'supabase sin config: fallback a torrent')
+      estrategia = 'torrent'
+    }
     if (cancelled) return
 
     // conectar Trystero
     try {
-      trystero = joinTrystero(freshSalaId, turn)
+      trystero = await joinTrystero(freshSalaId, turn, estrategia, supa)
     } catch(e){
       console.error('Trystero error', e)
       showToast('Error conectando P2P')
@@ -357,9 +388,9 @@
       if (!node) return
       const snap = node.snapshot()
       if (!snap.isHost && !snap.syncedOnce && Date.now() - joinedAt > REJOIN_MS) {
-        reconectar('Conexión lenta, reintentando…')
-      } else if (!snap.isHost && !snap.syncedOnce && relaysTotal > 0 && relaysAbiertos === 0 && Date.now() - joinedAt > 5000) {
-        reconectar('Sin señalización, reintentando…')
+        void reconectar('Conexión lenta, reintentando…')
+      } else if (!snap.isHost && !snap.syncedOnce && estrategia === 'torrent' && relaysTotal > 0 && relaysAbiertos === 0 && Date.now() - joinedAt > 5000) {
+        void reconectar('Sin señalización, reintentando…')
       } else if (!snap.isHost && !snap.syncedOnce && Date.now() - joinedAt > HARD_RELOAD_MS && reloadsHechas() < MAX_HARD_RELOADS) {
         try { sessionStorage.setItem(reloadKey, String(reloadsHechas() + 1)) } catch {}
         debugLog.log('sys', 'recarga dura por falta de sync')
@@ -486,7 +517,7 @@
   {#if !isHost && !synced}
     <div style="background:var(--accent);color:var(--bg);padding:0.6rem 1rem;border-radius:8px;margin:1rem 0;display:flex;gap:0.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
       <span>Conectando con la sala…{rejoining ? ' reintentando' : ''}</span>
-      <button on:click={()=>reconectar('Reintentando conexión…')} disabled={rejoining} style="background:var(--bg);color:var(--fg);padding:0.3rem 0.7rem;font-size:0.85rem">Reintentar</button>
+      <button on:click={()=>void reconectar('Reintentando conexión…')} disabled={rejoining} style="background:var(--bg);color:var(--fg);padding:0.3rem 0.7rem;font-size:0.85rem">Reintentar</button>
     </div>
   {/if}
 
@@ -499,14 +530,16 @@
 
     <ShareLink {salaId} {juegoId} />
 
-    {#if relaysTotal > 0}
+    {#if estrategia === 'torrent' && relaysTotal > 0}
       <p class="muted" style="font-size:0.8rem;margin:0.4rem 0 0">Señalización: {relaysAbiertos}/{relaysTotal} trackers
         {#if !debug}
           <button on:click={activarDebug} style="background:none;border:none;padding:0 0 0 0.4rem;margin:0;min-height:0;font-size:0.8rem;font-weight:400;color:var(--muted);text-decoration:underline;cursor:pointer">depurar</button>
         {/if}
       </p>
+    {:else if estrategia === 'supabase'}
+      <p class="muted" style="font-size:0.8rem;margin:0.4rem 0 0">Señalización: Supabase</p>
     {/if}
-    {#if isHost && relaysTotal > 0 && relaysAbiertos === 0 && ahora - joinedAt > SIN_SENAL_MS}
+    {#if isHost && estrategia === 'torrent' && relaysTotal > 0 && relaysAbiertos === 0 && ahora - joinedAt > SIN_SENAL_MS}
       <div style="background:var(--error);color:white;padding:0.6rem 1rem;border-radius:8px;margin:0.6rem 0;display:flex;gap:0.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
         <span>Sin conexión con los trackers: ningún jugador nuevo puede entrar. Recarga la página para re-anunciar la sala.</span>
         <button on:click={()=>location.reload()} style="background:white;color:var(--error);padding:0.3rem 0.7rem;font-size:0.85rem">Recargar</button>
@@ -520,6 +553,22 @@
         <button on:click={guardarTurn} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Guardar</button>
       </div>
       {#if turnMsg}<p class="muted">{turnMsg}</p>{/if}
+    </details>
+    <details style="margin-top:0.6rem;font-size:0.85rem">
+      <summary class="muted" style="cursor:pointer">Señalización: {estrategia === 'supabase' ? 'Supabase' : 'trackers'}</summary>
+      <p class="muted">Supabase re-anuncia presencia cada pocos segundos: los tardíos encuentran sala aunque lleguen minutos después. Requiere un proyecto (gratis) configurado abajo; sin él se usan trackers.</p>
+      <div style="display:flex;gap:0.4rem;margin-bottom:0.4rem">
+        <button on:click={()=>guardarEstrategiaUI('torrent')} style="background:{estrategia === 'torrent' ? 'var(--accent)' : 'var(--muted)'};padding:0.3rem 0.7rem;font-size:0.85rem">Trackers</button>
+        <button on:click={()=>guardarEstrategiaUI('supabase')} style="background:{estrategia === 'supabase' ? 'var(--accent)' : 'var(--muted)'};padding:0.3rem 0.7rem;font-size:0.85rem">Supabase</button>
+      </div>
+      {#if estrategia === 'supabase'}
+        <div style="display:grid;gap:0.4rem">
+          <input bind:value={supaUrlTxt} placeholder="https://xxx.supabase.co" aria-label="URL del proyecto Supabase" style="width:100%" />
+          <input bind:value={supaKeyTxt} placeholder="Clave pública anon" aria-label="Clave pública Supabase" style="width:100%" />
+          <div><button on:click={guardarSupaUI} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Guardar y recargar</button></div>
+        </div>
+      {/if}
+      {#if supaMsg}<p class="muted">{supaMsg}</p>{/if}
     </details>
     {#if debug}
       <details style="margin-top:0.6rem;font-size:0.85rem">

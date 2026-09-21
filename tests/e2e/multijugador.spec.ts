@@ -32,6 +32,10 @@ import { Server as TrackerServer } from 'bittorrent-tracker'
  *   E2E_BURST="15"          tamaños de sala en ráfaga ("" = ninguno)
  *   E2E_SLOW="8"            tamaños de sala con mitad lenta ("" = ninguno)
  *   E2E_PUBLIC=""           tamaños de sala vía trackers públicos ("" = ninguno)
+ *   E2E_NET=""              si es "supabase", todos los escenarios usan esa
+ *                         estrategia (requiere E2E_SUPA_URL y E2E_SUPA_KEY)
+ *   E2E_SUPA_URL=""         URL del proyecto Supabase de pruebas
+ *   E2E_SUPA_KEY=""         clave anon del proyecto Supabase de pruebas
  *   E2E_AGE_MIN=0           minutos de envejecido (0 = no probar); E2E_AGE_N=4
  *   E2E_TRACKER_PORT=18923  puerto ws del tracker local
  *   E2E_JOIN_GAP_MS=1200    pausa entre uniones escalonadas
@@ -57,6 +61,14 @@ const LAG_MS = Math.max(0, parseInt(process.env.E2E_LAG_MS || '600', 10) || 0)
 const LOSS_PCT = Math.min(90, Math.max(0, parseFloat(process.env.E2E_LOSS_PCT || '15') || 0))
 /** "1" = el host también sufre lag/pérdida (peor caso: anfitrión con mal WiFi) */
 const SLOW_HOST = process.env.E2E_SLOW_HOST === '1'
+/** Estrategia supabase opt-in para todos los escenarios (con credenciales). */
+const E2E_NET = process.env.E2E_NET === 'supabase' ? 'supabase' : ''
+const E2E_SUPA_URL = process.env.E2E_SUPA_URL || ''
+const E2E_SUPA_KEY = process.env.E2E_SUPA_KEY || ''
+const SUPA_Q =
+  E2E_NET === 'supabase' && E2E_SUPA_URL && E2E_SUPA_KEY
+    ? `net=supabase&supaUrl=${encodeURIComponent(E2E_SUPA_URL)}&supaKey=${encodeURIComponent(E2E_SUPA_KEY)}`
+    : ''
 
 const TRACKER_PORT = parseInt(process.env.E2E_TRACKER_PORT || '18923', 10)
 const JOIN_GAP_MS = parseInt(process.env.E2E_JOIN_GAP_MS || '1200', 10)
@@ -152,7 +164,8 @@ for (const esc of ESCENARIOS) {
       const query = extra ? `${extra}&name=${encodeURIComponent(name)}` : `name=${encodeURIComponent(name)}`
       const netQ = net ? `&${net}` : ''
       const sigQ = esc.publico ? '' : `&${trackerQ}`
-      await page.goto(`${baseURL}#/sala/${salaId}?${query}${sigQ}${netQ}`)
+      const supaQ = SUPA_Q ? `&${SUPA_Q}` : ''
+      await page.goto(`${baseURL}#/sala/${salaId}?${query}${sigQ}${netQ}${supaQ}`)
       const j: Jugador = { name, ctx, page, errors }
       jugadores.push(j)
       return j

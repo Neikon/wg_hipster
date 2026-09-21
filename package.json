@@ -28,6 +28,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "qrcode-generator": "^2.0.4",
     "trystero": "^0.20.1"
   }
