@@ -32,10 +32,10 @@ import { Server as TrackerServer } from 'bittorrent-tracker'
  *   E2E_BURST="15"          tamaños de sala en ráfaga ("" = ninguno)
  *   E2E_SLOW="8"            tamaños de sala con mitad lenta ("" = ninguno)
  *   E2E_PUBLIC=""           tamaños de sala vía trackers públicos ("" = ninguno)
- *   E2E_NET=""              si es "supabase", todos los escenarios usan esa
- *                         estrategia (requiere E2E_SUPA_URL y E2E_SUPA_KEY)
- *   E2E_SUPA_URL=""         URL del proyecto Supabase de pruebas
- *   E2E_SUPA_KEY=""         clave anon del proyecto Supabase de pruebas
+ *   E2E_NET=""              estrategia (torrent|supabase; por defecto supabase
+ *                         con el proyecto común; "torrent" usa tracker local)
+ *   E2E_SUPA_URL=""         URL del proyecto Supabase (por defecto el común)
+ *   E2E_SUPA_KEY=""         clave del proyecto Supabase (por defecto la común)
  *   E2E_AGE_MIN=0           minutos de envejecido (0 = no probar); E2E_AGE_N=4
  *   E2E_TRACKER_PORT=18923  puerto ws del tracker local
  *   E2E_JOIN_GAP_MS=1200    pausa entre uniones escalonadas
@@ -61,14 +61,20 @@ const LAG_MS = Math.max(0, parseInt(process.env.E2E_LAG_MS || '600', 10) || 0)
 const LOSS_PCT = Math.min(90, Math.max(0, parseFloat(process.env.E2E_LOSS_PCT || '15') || 0))
 /** "1" = el host también sufre lag/pérdida (peor caso: anfitrión con mal WiFi) */
 const SLOW_HOST = process.env.E2E_SLOW_HOST === '1'
-/** Estrategia supabase opt-in para todos los escenarios (con credenciales). */
-const E2E_NET = process.env.E2E_NET === 'supabase' ? 'supabase' : ''
+/** E2E_DEBUG=1 añade &debug=1 y vuelca el log de cada jugador al fallar. */
+const E2E_DEBUG = process.env.E2E_DEBUG === '1'
+const DEBUG_Q = E2E_DEBUG ? 'debug=1' : ''
+/** Estrategia: torrent (trackers) o supabase. Por defecto, la de la app (supabase con proyecto común). */
+const E2E_NET = process.env.E2E_NET === 'torrent' ? 'torrent' : 'supabase'
 const E2E_SUPA_URL = process.env.E2E_SUPA_URL || ''
 const E2E_SUPA_KEY = process.env.E2E_SUPA_KEY || ''
+/** E2E_PUBLIC solo tiene sentido con E2E_NET=torrent (trackers de producción). */
 const SUPA_Q =
   E2E_NET === 'supabase' && E2E_SUPA_URL && E2E_SUPA_KEY
     ? `net=supabase&supaUrl=${encodeURIComponent(E2E_SUPA_URL)}&supaKey=${encodeURIComponent(E2E_SUPA_KEY)}`
-    : ''
+    : E2E_NET === 'supabase'
+      ? 'net=supabase'
+      : 'net=torrent'
 
 const TRACKER_PORT = parseInt(process.env.E2E_TRACKER_PORT || '18923', 10)
 const JOIN_GAP_MS = parseInt(process.env.E2E_JOIN_GAP_MS || '1200', 10)
@@ -165,7 +171,8 @@ for (const esc of ESCENARIOS) {
       const netQ = net ? `&${net}` : ''
       const sigQ = esc.publico ? '' : `&${trackerQ}`
       const supaQ = SUPA_Q ? `&${SUPA_Q}` : ''
-      await page.goto(`${baseURL}#/sala/${salaId}?${query}${sigQ}${netQ}${supaQ}`)
+      const dbgQ = DEBUG_Q ? `&${DEBUG_Q}` : ''
+      await page.goto(`${baseURL}#/sala/${salaId}?${query}${sigQ}${netQ}${supaQ}${dbgQ}`)
       const j: Jugador = { name, ctx, page, errors }
       jugadores.push(j)
       return j
@@ -179,8 +186,9 @@ for (const esc of ESCENARIOS) {
       const host = await abrir('Host', 'host=1', hostNet)
       await expect(host.page.getByText('1/20 jugadores')).toBeVisible({ timeout: 30_000 })
       if (!esc.publico) {
-        // con tracker local hay 1/1; en público el nº varía (trackers vivos)
-        await expect(host.page.getByText('Señalización: 1/1 trackers')).toBeVisible({ timeout: 30_000 })
+        // supabase muestra línea propia; con tracker local hay 1/1
+        const objetivoSig = E2E_NET === 'supabase' ? 'Señalización: Supabase' : 'Señalización: 1/1 trackers'
+        await expect(host.page.getByText(objetivoSig).first()).toBeVisible({ timeout: 30_000 })
       }
 
       if (gap <= 0) {
@@ -214,23 +222,40 @@ for (const esc of ESCENARIOS) {
         await sleep(2000)
       }
 
-      const lentos = new Set(
-        Array.from({ length: n - Math.max(esc.slowFrom, 2) + 1 }, (_, k) => `Jugador ${Math.max(esc.slowFrom, 2) + k}`)
-      )
+      const lentos =
+        esc.slowFrom > 0
+          ? new Set(Array.from({ length: n - Math.max(esc.slowFrom, 2) + 1 }, (_, k) => `Jugador ${Math.max(esc.slowFrom, 2) + k}`))
+          : new Set<string>()
+      const debugLogVolcado: string[] = []
       const diagnostico =
         `sala ${salaId} con ${n} jugadores (${tag}, objetivo ${objetivo}` +
         (esc.ageMin > 0 ? `, envejecido ${esc.ageMin} min` : '') +
-        (esc.slowFrom > 0 ? `, lentos desde Jugador ${esc.slowFrom}: lagMs=${esc.lagMs} lossPct=${esc.lossPct}` : '') +
         `):\n` +
         estado.map((s) => `  - ${s.name}${lentos.has(s.name) ? ' (lento)' : ''}: ${s.conteo ?? 'SIN CONTEO (¿limbo?)'}`).join('\n')
 
+      if (E2E_DEBUG) {
+        // Volcar la cola del log de cada jugador para diagnosticar el limbo.
+        for (const j of jugadores) {
+          const cola = await j.page
+            .locator('pre')
+            .first()
+            .textContent()
+            .catch(() => null)
+          if (cola) {
+            const ultimas = cola.trim().split('\n').slice(-12).join('\n')
+            debugLogVolcado.push(`--- ${j.name} ---\n${ultimas}`)
+          }
+        }
+      }
+      const extraDebug = debugLogVolcado.length > 0 ? `\nLOGS:\n${debugLogVolcado.join('\n')}` : ''
+
       for (const s of estado) {
-        expect(s.conteo, `No converge.\n${diagnostico}`).toBe(objetivo)
+        expect(s.conteo, `No converge.\n${diagnostico}${extraDebug}`).toBe(objetivo)
       }
 
       // El anfitrión lista nominalmente a todos (no solo el conteo).
       for (const j of jugadores) {
-        await expect(host.page.getByText(j.name, { exact: true }).first(), `Falta ${j.name}.\n${diagnostico}`).toBeVisible({
+        await expect(host.page.getByText(j.name, { exact: true }).first(), `Falta ${j.name}.\n${diagnostico}${extraDebug}`).toBeVisible({
           timeout: 15_000
         })
       }
