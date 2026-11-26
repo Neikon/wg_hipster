@@ -2,7 +2,7 @@
   import { gameStore } from '../../stores/gameStore'
   import { roomStore } from '../../stores/roomStore'
   import { DEFAULT_CONFIG, margenPara, pistasPara, esExperto, PUNTOS_EXTRA } from './engine'
-  import { LISTAS, buscarEnItunes, prepararPartida, prepararPartidaBusqueda } from './listas'
+  import { LISTAS, LISTA_FALLBACK, buscarEnItunes, prepararPartida, prepararPartidaBusqueda } from './listas'
   import type { ResultadoBusqueda, TipoBusqueda } from './listas'
   import type { HipsterState, HipsterTrack, Dificultad, ModoJuego, Pista } from './types'
   import { pistaTitulo, mostrarAlbum } from './tracks'
@@ -31,36 +31,36 @@
   let descartados = 0
   // Búsqueda libre del host
   let textoBusq = ''
-  let filtroTipos: TipoBusqueda[] = ['album', 'artista', 'lista']
+  let filtroTipos: TipoBusqueda[] = ['album', 'artista']
   let buscando = false
   let busqError = ''
   let resultados: ResultadoBusqueda[] = []
   let seleccion: ResultadoBusqueda | null = null
   $: state = $gameStore as HipsterState
   $: room = $roomStore
-  // Hidratar el formulario SOLO al entrar al lobby: si se hiciera en cada
-  // actualización del estado, la entrada de un invitado (playerJoined
-  // versiona el estado) pisaría la configuración que el host está eligiendo
-  // (modo, dificultad, rondas, lista…).
-  let enLobby = false
+  // Aplicar la primera configuración del lobby y preservar las ediciones del host.
+  let configAplicada = false
   $: {
-    const ahoraLobby = state.phase === 'lobby'
-    if (ahoraLobby && !enLobby && state.config) {
+    if (state.phase !== 'lobby') {
+      configAplicada = false
+    } else if (!configAplicada && state.config) {
       segundos = state.config.segundos
       listaId = state.config.listaId
       numRondas = state.config.numRondas
       modo = state.config.modo
       dificultad = state.config.dificultad
       pistas = [...state.config.pistas]
+      configAplicada = true
     }
-    enLobby = ahoraLobby
   }
-  $: claveSel = seleccion ? `${seleccion.tipo}:${seleccion.id}` : ''
-  // Si el host cambia de lista, modo, rondas o selección, hay que volver a cargar.
-  $: if (tracks && (listaId !== cargadaPara?.listaId || numRondas !== cargadaPara?.numRondas || modo !== cargadaPara?.modo || claveSel !== (cargadaPara?.busq ?? ''))) {
+  $: if (listaId === LISTA_FALLBACK) numRondas = 5
+  $: claveActual = claveLista(listaId, numRondas, modo, seleccion)
+  $: if (cargadaPara !== null && claveActual !== cargadaPara) {
+    cargadaPara = null
     tracks = null
     pool = null
     descartados = 0
+    cargaError = ''
   }
   // Al cambiar de ronda se limpian los campos de respuesta.
   let ultimaRondaVista = -1
@@ -69,26 +69,40 @@
     anioEscrito = null
     textoRespuesta = ''
   }
-  let cargadaPara: { listaId: string; numRondas: number; busq: string; modo: ModoJuego } | null = null
+  let cargadaPara: string | null = null
+  let ultimaCarga = 0
 
-  async function cargar(){
+  function claveLista(lista: string, rondas: number, modoJuego: ModoJuego, resultado: ResultadoBusqueda | null) {
+    const busqueda = lista === BUSCAR_ID && resultado ? `${resultado.tipo}:${resultado.id}` : ''
+    return `${lista}:${rondas}:${modoJuego}:${busqueda}`
+  }
+
+  async function cargar() {
+    const carga = ++ultimaCarga
+    const clave = claveLista(listaId, numRondas, modo, seleccion)
+    const vigente = () => carga === ultimaCarga && clave === claveLista(listaId, numRondas, modo, seleccion)
     cargando = true
     cargaError = ''
     tracks = null
     pool = null
+    descartados = 0
     try {
       const conAnio = modo === 'anio'
       const r = listaId === BUSCAR_ID && seleccion
         ? await prepararPartidaBusqueda(seleccion, numRondas, 'ES', { requireAnio: conAnio })
         : await prepararPartida(listaId, numRondas, { requireAnio: conAnio })
+      if (!vigente()) return
       tracks = r.tracks
       pool = r.pool
       descartados = r.descartados
-      cargadaPara = { listaId, numRondas, busq: claveSel, modo }
+      cargadaPara = clave
     } catch (e) {
-      cargaError = e instanceof Error ? e.message : 'No se pudo cargar la lista'
+      if (vigente()) {
+        cargadaPara = clave
+        cargaError = e instanceof Error ? e.message : 'No se pudo cargar la lista'
+      }
     } finally {
-      cargando = false
+      if (carga === ultimaCarga) cargando = false
     }
   }
 
@@ -109,9 +123,6 @@
 
   function elegir(r: ResultadoBusqueda){
     seleccion = r
-    tracks = null
-    pool = null
-    descartados = 0
     void cargar()
   }
 
@@ -143,7 +154,7 @@
     onAction({ t:'answer', opcion: anioEscrito })
   }
   function start(){
-    if (!tracks || !pool) return
+    if (!tracks || !pool || cargadaPara !== claveLista(listaId, numRondas, modo, seleccion)) return
     onAction({ t:'startGame', juegoId:'hipster', config: { segundos, listaId, numRondas, modo, dificultad, pistas }, tracks, pool })
   }
 
@@ -155,6 +166,7 @@
   function next(){ onAction({ t:'next' }) }
   function restart(){ onAction({ t:'restart' }) }
   $: peers = room.peers
+  $: respondieron = state.respondieron ?? Object.keys(state.respuestas ?? {})
   function nombre(pid:string){ return peers.find((p:any)=>p.id===pid)?.name || pid.slice(0,4) }
 
   // Tinte dinámico de la carátula durante pregunta/resultados; en lobby se limpia.
@@ -165,17 +177,14 @@
     const fase = state.phase
     const track = fase === 'pregunta' || fase === 'resultados' ? state.tracks[state.ronda] : null
     const tema = $theme
-    const clave = track ? `${fase}:${track.trackId}:${tema}` : `${fase}:${tema}`
+    const clave = track ? `${fase}:${track.artworkUrl}:${tema}` : `${fase}:${tema}`
     if (clave !== tintePara) {
       tintePara = clave
       if (!track?.artworkUrl) {
         tinteActual.set(null)
       } else {
-        const id = track.trackId
-        tinteDeCaratula(track.artworkUrl, id, tema).then((t) => {
-          if (state.tracks[state.ronda]?.trackId === id && (state.phase === 'pregunta' || state.phase === 'resultados')) {
-            tinteActual.set(t)
-          }
+        tinteDeCaratula(track.artworkUrl, tema).then((t) => {
+          if (tintePara === clave) tinteActual.set(t)
         })
       }
     }
@@ -191,6 +200,7 @@
         <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
           Lista
           <select bind:value={listaId} aria-label="Lista de canciones">
+            <option value={LISTA_FALLBACK}>Clásicos (5 canciones)</option>
             {#each LISTAS as l}
               <option value={l.id}>{l.nombre}</option>
             {/each}
@@ -202,7 +212,7 @@
             <fieldset style="border:0;margin:0;padding:0;display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
               <legend style="padding:0">Buscar por</legend>
               <span style="display:flex;gap:0.6rem;flex-wrap:wrap">
-                {#each [['album', 'Álbumes'], ['artista', 'Artistas'], ['lista', 'Listas']] as [v, etiqueta]}
+                {#each [['album', 'Álbumes'], ['artista', 'Artistas']] as [v, etiqueta]}
                   {@const val = v as TipoBusqueda}
                   <label style="display:flex;gap:0.3rem;align-items:center;color:var(--fg);font-size:0.85rem">
                     <input
@@ -219,7 +229,7 @@
               </span>
             </fieldset>
             <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
-              Buscar álbum, artista o lista
+              Buscar álbum o artista
               <span style="display:flex;gap:0.4rem">
                 <input
                   placeholder="p. ej. top 80s, Queen…"
@@ -242,7 +252,7 @@
                       style="display:flex;gap:0.6rem;align-items:center;width:100%;text-align:left;background:{seleccion?.id===r.id && seleccion?.tipo===r.tipo ? 'var(--success)' : 'var(--card)'};border:1px solid var(--muted)"
                     >
                       {#if r.artworkUrl}<img src={r.artworkUrl} alt="" width="40" height="40" style="border-radius:4px" />{/if}
-                      <span><strong>{r.nombre}</strong><br /><small class="muted">{r.tipo === 'album' ? 'Álbum' : r.tipo === 'artista' ? 'Artista' : 'Lista'} · {r.subtitulo}</small></span>
+                      <span><strong>{r.nombre}</strong><br /><small class="muted">{r.tipo === 'album' ? 'Álbum' : 'Artista'} · {r.subtitulo}</small></span>
                     </button>
                   </li>
                 {/each}
@@ -291,8 +301,8 @@
           Rondas
           <select bind:value={numRondas} aria-label="Número de rondas">
             <option value={5}>5 rondas</option>
-            <option value={10}>10 rondas</option>
-            <option value={20}>20 rondas</option>
+            <option value={10} disabled={listaId === LISTA_FALLBACK}>10 rondas</option>
+            <option value={20} disabled={listaId === LISTA_FALLBACK}>20 rondas</option>
           </select>
         </label>
         <label style="display:grid;gap:0.35rem;color:var(--muted);font-size:0.9rem">
@@ -330,7 +340,7 @@
           <button on:click={cargar} style="width:100%;background:var(--muted)">Recargar lista</button>
         </div>
       {:else if listaId === BUSCAR_ID && !seleccion}
-        <p class="muted">Busca y elige un álbum, un artista o una lista para jugar.</p>
+        <p class="muted">Busca y elige un álbum o artista para jugar.</p>
       {:else}
         <div class="acciones-sticky">
           <button on:click={cargar} style="width:100%">Cargar lista</button>
@@ -387,9 +397,9 @@
       {#if trackActual && pistasCfg.length}
         <ul class="muted pistas" style="margin:1rem 0 0;padding-left:1.2rem;display:grid;gap:0.2rem;grid-template-columns:minmax(0,1fr);overflow-wrap:anywhere">
           {#if pistasCfg.includes('artista')}<li>🎤 Artista: <strong>{trackActual.artista}</strong></li>{/if}
-          {#if pistasCfg.includes('titulo')}<li>🔤 Título: <strong>{state.config.modo === 'titulo' ? pistaTitulo(trackActual.titulo) : trackActual.titulo}</strong></li>{/if}
+          {#if pistasCfg.includes('titulo')}<li>🔤 Título: <strong>{room.isHost ? pistaTitulo(trackActual.titulo) : trackActual.titulo}</strong></li>{/if}
           {#if pistasCfg.includes('anio') && trackActual.anio !== null}<li>📅 Año: <strong>{trackActual.anio}</strong></li>{/if}
-          {#if pistasCfg.includes('album') && mostrarAlbum(trackActual)}<li>💿 Álbum: <strong>{trackActual.album}</strong></li>{/if}
+          {#if pistasCfg.includes('album') && (room.isHost ? mostrarAlbum(trackActual) : trackActual.album)}<li>💿 Álbum: <strong>{trackActual.album}</strong></li>{/if}
         </ul>
       {/if}
       <div style="display:grid;gap:0.6rem;margin-top:1rem">
@@ -402,7 +412,7 @@
         {/each}
       </div>
     {/if}
-    <p class="muted" style="margin-top:0.8rem">{Object.keys(state.respuestas).length}/{peers.length} han respondido{#if Object.keys(state.respuestas).length}: {Object.keys(state.respuestas).map((pid)=>nombre(pid)).join(', ')}{/if}</p>
+    <p class="muted" style="margin-top:0.8rem">{respondieron.length}/{peers.length} han respondido{#if respondieron.length}: {respondieron.map((pid)=>nombre(pid)).join(', ')}{/if}</p>
   </div>
 {:else if state.phase === 'correccion'}
   {@const ronda = state.tracks[state.ronda]}

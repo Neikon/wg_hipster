@@ -1,12 +1,19 @@
+import type { GameReplication } from '../game/types'
+import { sanitizeName } from '../utils/names'
 import { electNewHost, isRoomFull } from './room'
 import type { Peer } from './types'
 
 export interface GameModuleLike {
   reducer: (state: any, action: any, ctx: { isHost: boolean; peerId: string }) => any
+  replication?: GameReplication<any>
+}
+
+interface ConnectedPeer extends Peer {
+  transportId: string
 }
 
 export type SyncEvent =
-  | { t: 'room'; peers: Peer[]; joinOrder: string[]; hostId: string; isHost: boolean; selfName: string }
+  | { t: 'room'; peers: Peer[]; joinOrder: string[]; hostId: string; hostTransportId: string; isHost: boolean; selfName: string }
   | { t: 'game'; state: any }
   | { t: 'toast'; msg: string }
   | { t: 'salaFull' }
@@ -16,94 +23,81 @@ export interface SyncNodeOpts {
   salaId: string
   selfId: string
   selfName: string
-  /** true si este nodo crea la sala como anfitrión */
+  selfTransportId?: string
   isHost: boolean
   hostId: string
+  hostTransportId?: string
   juegoId: string
   initialGameState: any
   getGameModule: (id: string) => GameModuleLike | null
-  send: (msg: any) => void
+  send: (msg: any, transportPeerId?: string) => void
   emit: (e: SyncEvent) => void
   now?: () => number
 }
 
-export interface SyncSnapshot {
-  selfId: string
-  selfName: string
-  peers: Peer[]
-  joinOrder: string[]
-  hostId: string
-  isHost: boolean
-  juegoId: string
-  gameState: any
-  salaFull: boolean
-  syncedOnce: boolean
+type Answer = { t: 'answer'; opcion: number } | { t: 'answerTexto'; texto: string }
+
+const record = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const idValido = (id: unknown): id is string =>
+  typeof id === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(id) && !Object.hasOwn(Object.prototype, id)
+
+function peerValido(peer: unknown): peer is ConnectedPeer {
+  return record(peer) && idValido(peer.id) && idValido(peer.transportId)
+    && typeof peer.name === 'string' && sanitizeName(peer.name) === peer.name
+    && typeof peer.joinTime === 'number' && Number.isFinite(peer.joinTime)
 }
 
-/**
- * Protocolo P2P de la sala (extraído de Room.svelte para poder testearlo):
- * hello / requestState / stateSync / action / rename, heartbeat del host
- * cada 2 s, tick de juego cada 1 s y migración de host.
- *
- * Dos garantías para uniones tardías o lentas (móviles):
- * - el invitado se incluye a sí mismo desde el inicio (nunca ve sala vacía);
- * - el invitado reintenta requestState cada 2 s hasta recibir su primer sync.
- */
+function answerValida(value: unknown): value is Answer {
+  return record(value) && (value.t === 'answer'
+    ? Number.isInteger(value.opcion)
+    : value.t === 'answerTexto' && typeof value.texto === 'string' && value.texto.length <= 140)
+}
+
 export class SyncNode {
-  private salaId: string
-  private selfId: string
+  private readonly selfId: string
+  private readonly selfTransportId: string
   private selfName: string
-  private peers: Peer[]
-  private joinOrder: string[]
+  private peers: ConnectedPeer[]
   private hostId: string
+  private hostTransportId: string
   private isHost: boolean
-  private juegoId: string
+  private readonly juegoId: string
   private gameState: any
   private salaFull = false
   private syncedOnce: boolean
-  private transportToLogicalPeer = new Map<string, string>()
+  private revision = 0
+  private gameRun = 0
   private tickCount = 0
-  /** Mensajes redundantes con retardo (en ticks de 1 s): si el primero se pierde, el eco llega. */
-  private delayed: Array<{ msg: any; ticks: number }> = []
-  /**
-   * Respuesta propia pendiente de confirmación (solo invitados): si el host
-   * no la refleja, se reenvía cada 2 s hasta 30 veces. Sin esto, una respuesta
-   * perdida deja la ronda esperando al temporizador.
-   */
-  private pendingAnswer: { opcion?: number; texto?: string; ronda: number; reintentos: number } | null = null
-  private static readonly MAX_REINTENTOS = 30
-  private getGameModule: (id: string) => GameModuleLike | null
-  private send: (msg: any) => void
-  private emitEv: (e: SyncEvent) => void
+  private disconnected = new Set<string>()
+  private delayedHellos = new Map<string, number>()
+  private pendingAnswer: { action: Answer; gameRun: number; ronda: number; sequence: number; retries: number } | null = null
+  private answerSequence = 0
+  private receivedAnswers = new Map<string, number>()
+  private recoveryDeck: Record<string, unknown> | null = null
+  private recoveryState: any = null
+  private deckConfirmedBy: string | null = null
   private now: () => number
 
-  constructor(opts: SyncNodeOpts) {
-    this.salaId = opts.salaId
+  constructor(private readonly opts: SyncNodeOpts) {
     this.selfId = opts.selfId
     this.selfName = opts.selfName
+    this.selfTransportId = opts.selfTransportId ?? opts.selfId
     this.isHost = opts.isHost
     this.hostId = opts.hostId
+    this.hostTransportId = opts.isHost ? this.selfTransportId : opts.hostTransportId ?? ''
     this.juegoId = opts.juegoId
     this.gameState = opts.initialGameState
-    this.getGameModule = opts.getGameModule
-    this.send = opts.send
-    this.emitEv = opts.emit
-    this.now = opts.now ?? (() => Date.now())
-    // El propio nodo siempre está en su lista (antes el invitado veía sala vacía).
-    const self: Peer = { id: opts.selfId, name: opts.selfName, joinTime: this.now() }
-    this.peers = [self]
-    this.joinOrder = [opts.selfId]
+    this.now = opts.now ?? Date.now
+    this.peers = [{ id: this.selfId, name: this.selfName, joinTime: this.now(), transportId: this.selfTransportId }]
     this.syncedOnce = opts.isHost
   }
 
-  snapshot(): SyncSnapshot {
+  snapshot() {
     return {
+      ...this.roomSnapshot(),
       selfId: this.selfId,
-      selfName: this.selfName,
-      peers: [...this.peers],
-      joinOrder: [...this.joinOrder],
-      hostId: this.hostId,
-      isHost: this.isHost,
       juegoId: this.juegoId,
       gameState: this.gameState,
       salaFull: this.salaFull,
@@ -111,233 +105,323 @@ export class SyncNode {
     }
   }
 
-  private emitRoom() {
-    this.emitEv({
-      t: 'room',
+  private roomSnapshot() {
+    return {
       peers: [...this.peers],
-      joinOrder: [...this.joinOrder],
+      joinOrder: this.peers.map((peer) => peer.id),
       hostId: this.hostId,
+      hostTransportId: this.hostTransportId,
       isHost: this.isHost,
       selfName: this.selfName
-    })
-  }
-
-  /** Llamar al conectar el transporte (el invitado pide estado). */
-  start() {
-    if (!this.isHost) this.send({ t: 'requestState', from: this.selfId })
-  }
-
-  private broadcastState() {
-    if (!this.isHost) return
-    const msg = {
-      t: 'stateSync',
-      juegoId: this.juegoId,
-      fullState: this.gameState,
-      version: this.gameState.version,
-      hostId: this.hostId,
-      peers: this.peers,
-      joinOrder: this.joinOrder
     }
-    this.send(msg)
+  }
+
+  private emitRoom() {
+    this.opts.emit({ t: 'room', ...this.roomSnapshot() })
+  }
+
+  private hello(transportPeerId?: string) {
+    this.opts.send({ t: 'hello', peerId: this.selfId, name: this.selfName, joinTime: this.peers.find((p) => p.id === this.selfId)?.joinTime ?? this.now() }, transportPeerId)
+  }
+
+  start() {
+    if (!this.isHost) this.hello(this.hostTransportId || undefined)
+  }
+
+  private get replication() {
+    return this.opts.getGameModule(this.juegoId)?.replication
+  }
+
+  private successor() {
+    return this.peers.find((peer) => peer.id !== this.hostId && !this.disconnected.has(peer.transportId))
+  }
+
+  private broadcastState(only?: string) {
+    if (!this.isHost) return
+    const revision = ++this.revision
+    const replication = this.replication
+    const roster = [...this.peers]
+    for (const peer of roster) {
+      if (peer.id === this.selfId || (only && peer.transportId !== only)) continue
+      this.opts.send({
+        t: 'stateSync',
+        juegoId: this.juegoId,
+        fullState: replication?.publicState(this.gameState, peer.id) ?? this.gameState,
+        version: this.gameState.version,
+        revision,
+        gameRun: this.gameRun,
+        hostId: this.hostId,
+        peers: roster
+      }, peer.transportId)
+    }
+
+    const successor = this.successor()
+    if (!replication || !successor || (only && successor.transportId !== only)) return
+    const { state, deck } = replication.recovery(this.gameState)
+    this.opts.send({
+      t: 'hostBackup',
+      gameRun: this.gameRun,
+      state,
+      ...(this.deckConfirmedBy === successor.transportId ? {} : { deck })
+    }, successor.transportId)
   }
 
   private handleAction(action: any, from: string) {
-    // solo el host aplica el reducer
-    if (!this.isHost) return
-    const game = this.getGameModule(this.juegoId)
-    if (!game) return
-    if (action.t === 'startGame' && action.juegoId && action.juegoId !== this.juegoId) return
-    // El reducer corre en el host, pero ctx.isHost describe al autor de la acción.
-    const ctx = { isHost: from === this.hostId, peerId: from }
-    const next = game.reducer(this.gameState, action, ctx)
-    if (next !== this.gameState) {
-      this.gameState = next
-      this.emitEv({ t: 'game', state: this.gameState })
-      this.broadcastState()
+    if (!this.isHost) return false
+    const game = this.opts.getGameModule(this.juegoId)
+    if (!game) return false
+    const next = game.reducer(this.gameState, action, { isHost: from === this.selfId, peerId: from })
+    if (next === this.gameState) return false
+    if (action.t === 'startGame' || action.t === 'restart') {
+      this.gameRun = next.version
+      this.deckConfirmedBy = null
+      this.receivedAnswers.clear()
     }
+    this.gameState = next
+    this.opts.emit({ t: 'game', state: next })
+    this.broadcastState()
+    return true
   }
 
-  /** Un tick por segundo (lo llama el componente con setInterval). */
   tickSecond() {
     this.tickCount++
-    // enviar ecos pendientes
-    this.delayed = this.delayed.filter((d) => {
-      d.ticks--
-      if (d.ticks <= 0) {
-        this.send(d.msg)
-        return false
-      }
-      return true
-    })
-    if (this.isHost) {
-      this.handleAction({ t: 'tick' }, this.selfId)
-      // heartbeat stateSync cada 2 s si host
-      if (this.tickCount % 2 === 0) this.broadcastState()
-    } else if (!this.syncedOnce && this.tickCount % 2 === 0) {
-      // invitado aún sin sincronizar: reintentar hasta que llegue el primer sync
-      this.send({ t: 'requestState', from: this.selfId })
+    let repeatedHello = false
+    for (const [peerId, tick] of this.delayedHellos) {
+      if (tick > this.tickCount) continue
+      this.delayedHellos.delete(peerId)
+      this.hello(peerId)
+      repeatedHello = true
     }
-    // reenviar respuesta propia si el host aún no la refleja
-    if (!this.isHost && this.pendingAnswer && this.tickCount % 2 === 0) {
-      const p = this.pendingAnswer
-      const mias = this.gameState?.respuestas?.[this.selfId]
-      const rondaActual = this.gameState?.ronda
-      const enPregunta = this.gameState?.phase === 'pregunta'
-      if (!enPregunta || rondaActual !== p.ronda || mias !== undefined) {
-        this.pendingAnswer = null
-      } else if (p.reintentos < SyncNode.MAX_REINTENTOS) {
-        p.reintentos++
-        const reintento = p.texto !== undefined ? { t: 'answerTexto', texto: p.texto } : { t: 'answer', opcion: p.opcion }
-        this.send({ t: 'action', juegoId: this.juegoId, action: reintento, from: this.selfId })
-      } else {
-        this.pendingAnswer = null
-      }
+    const heartbeat = this.tickCount % 2 === 0
+    if (this.isHost) {
+      if (!this.handleAction({ t: 'tick' }, this.selfId) && heartbeat) this.broadcastState()
+    } else if (heartbeat) {
+      if (!repeatedHello && (!this.syncedOnce || this.disconnected.has(this.hostTransportId))) this.start()
+      this.retryAnswer()
     }
   }
 
-  /** Acción de juego originada en la UI local. */
-  gameAction(a: any) {
-    const action = a.t === 'startGame' ? { ...a, juegoId: this.juegoId } : a
+  private retryAnswer() {
+    const answer = this.pendingAnswer
+    if (!answer) return
+    const previous = this.gameState.respuestas?.[this.selfId]
+    const expected = answer.action.t === 'answer' ? answer.action.opcion : answer.action.texto
+    if (previous === expected || this.gameState.phase !== 'pregunta'
+      || this.gameRun !== answer.gameRun || this.gameState.ronda !== answer.ronda || answer.retries >= 30) {
+      this.pendingAnswer = null
+      return
+    }
+    answer.retries++
+    this.sendAnswer(answer)
+  }
+
+  private sendAnswer(answer: NonNullable<SyncNode['pendingAnswer']>) {
+    const { action, gameRun, ronda, sequence } = answer
+    if (this.hostTransportId) this.opts.send({ t: 'action', action, gameRun, ronda, sequence }, this.hostTransportId)
+  }
+
+  gameAction(action: any) {
     if (this.isHost) {
       this.handleAction(action, this.selfId)
-    } else {
-      this.send({ t: 'action', juegoId: this.juegoId, action, from: this.selfId })
-      if (action.t === 'answer') {
-        this.pendingAnswer = { opcion: action.opcion, ronda: this.gameState?.ronda ?? -1, reintentos: 0 }
-      } else if (action.t === 'answerTexto') {
-        this.pendingAnswer = { texto: action.texto, ronda: this.gameState?.ronda ?? -1, reintentos: 0 }
+    } else if (this.syncedOnce && this.gameState.phase === 'pregunta' && answerValida(action)) {
+      this.pendingAnswer = {
+        action, gameRun: this.gameRun, ronda: this.gameState.ronda, sequence: ++this.answerSequence, retries: 0
       }
+      this.sendAnswer(this.pendingAnswer)
     }
   }
 
-  rename(newName: string) {
+  rename(name: string) {
+    const newName = sanitizeName(name)
+    if (!newName) return
+    this.selfName = newName
     if (this.isHost) {
-      this.peers = this.peers.map((p) => (p.id === this.selfId ? { ...p, name: newName } : p))
-      this.selfName = newName
-      this.emitRoom()
-      this.broadcastState()
+      this.renamePeer(this.selfId, newName)
     } else {
-      this.send({ t: 'rename', peerId: this.selfId, newName })
-      // optimista local
-      this.selfName = newName
       this.emitRoom()
+      if (this.hostTransportId) this.opts.send({ t: 'rename', newName }, this.hostTransportId)
     }
   }
 
-  receive(msg: any, transportPeerId: string) {
-    if (!msg || !msg.t) return
-    if (msg.t === 'hello') {
-      this.transportToLogicalPeer.set(transportPeerId, msg.peerId)
-      // solo el host gestiona hello
-      if (this.isHost) {
-        if (isRoomFull(this.peers.length)) {
-          this.send({ t: 'roomFull', salaId: this.salaId })
-          return
-        }
-        const existing = this.peers.find((p) => p.id === msg.peerId)
-        if (!existing) {
-          const newPeer: Peer = { id: msg.peerId, name: msg.name, joinTime: msg.joinTime }
-          this.peers = [...this.peers, newPeer]
-          this.joinOrder = [...this.joinOrder, msg.peerId]
-          this.emitRoom()
-          const previousState = this.gameState
-          this.handleAction({ t: 'playerJoined', peerId: msg.peerId }, this.selfId)
-          if (this.gameState === previousState) this.broadcastState()
-        }
-      }
-    } else if (msg.t === 'requestState') {
-      if (this.isHost) this.broadcastState()
-    } else if (msg.t === 'stateSync') {
-      const incomingJuegoId = msg.juegoId || msg.fullState?.gameId
-      const gameChanged = incomingJuegoId !== undefined && incomingJuegoId !== this.juegoId
-      if (gameChanged) {
-        this.juegoId = incomingJuegoId
-      }
-      // validar version
-      if (
-        !gameChanged &&
-        msg.version !== undefined &&
-        this.gameState.version !== undefined &&
-        msg.version <= this.gameState.version
-      ) {
-        // ignorar viejo, pero actualizar peers/host abajo
-      } else {
-        this.gameState = msg.fullState
-        this.emitEv({ t: 'game', state: this.gameState })
-      }
-      if (!this.syncedOnce) this.emitEv({ t: 'synced' })
-      this.syncedOnce = true
-      // actualizar room peers/host
-      if (msg.peers) {
-        this.peers = msg.peers
-        this.hostId = msg.hostId
-        this.joinOrder = msg.joinOrder || this.joinOrder
-        const amHost = this.hostId === this.selfId
-        if (amHost !== this.isHost) {
-          this.isHost = amHost
-          if (this.isHost) this.emitEv({ t: 'toast', msg: 'Ahora eres el anfitrión' })
-        }
-        this.emitRoom()
-      }
-    } else if (msg.t === 'action') {
-      const logicalPeerId = this.transportToLogicalPeer.get(transportPeerId) || msg.from
-      if (!msg.juegoId || msg.juegoId === this.juegoId) this.handleAction(msg.action, logicalPeerId)
-    } else if (msg.t === 'rename') {
-      if (this.isHost) {
-        const logicalPeerId = this.transportToLogicalPeer.get(transportPeerId) || msg.peerId
-        this.peers = this.peers.map((p) => (p.id === logicalPeerId ? { ...p, name: msg.newName } : p))
-        this.emitRoom()
-        this.broadcastState()
-      }
-    } else if (msg.t === 'roomFull') {
-      this.salaFull = true
-      this.emitEv({ t: 'salaFull' })
-      this.emitEv({ t: 'toast', msg: 'Sala llena (20/20)' })
+  private renamePeer(peerId: string, name: string) {
+    this.peers = this.peers.map((peer) => peer.id === peerId ? { ...peer, name } : peer)
+    this.emitRoom()
+    this.broadcastState()
+  }
+
+  receive(msg: unknown, transportPeerId: string) {
+    if (!record(msg) || !idValido(transportPeerId)) return
+    if (this.isHost) {
+      this.receiveAsHost(msg, transportPeerId)
+      return
     }
+    if (this.hostTransportId && transportPeerId !== this.hostTransportId) return
+    if (msg.t === 'stateSync') this.receiveState(msg, transportPeerId)
+    if (msg.t === 'hostBackup' && this.syncedOnce && this.successor()?.id === this.selfId) {
+      this.receiveBackup(msg, transportPeerId)
+    }
+    if (msg.t === 'roomFull' && !this.syncedOnce && !this.salaFull && msg.salaId === this.opts.salaId) {
+      this.salaFull = true
+      this.opts.emit({ t: 'salaFull' })
+      this.opts.emit({ t: 'toast', msg: 'Sala llena (20/20)' })
+    }
+  }
+
+  private receiveAsHost(msg: Record<string, unknown>, transportPeerId: string) {
+    const peer = this.peers.find((p) => p.transportId === transportPeerId)
+    if (msg.t === 'hello') {
+      this.admit(msg, transportPeerId, peer)
+      return
+    }
+    if (!peer || peer.id === this.selfId) return
+    if (msg.t === 'rename' && typeof msg.newName === 'string') {
+      const name = sanitizeName(msg.newName)
+      if (name && name !== peer.name) this.renamePeer(peer.id, name)
+    }
+    if (msg.t === 'deckAck' && msg.gameRun === this.gameRun && this.successor()?.id === peer.id) {
+      this.deckConfirmedBy = peer.transportId
+    }
+    if (msg.t === 'action' && msg.gameRun === this.gameRun && msg.ronda === this.gameState.ronda
+      && typeof msg.sequence === 'number' && Number.isSafeInteger(msg.sequence)
+      && msg.sequence > (this.receivedAnswers.get(peer.id) ?? 0) && answerValida(msg.action)) {
+      this.receivedAnswers.set(peer.id, msg.sequence)
+      this.handleAction(msg.action, peer.id)
+    }
+  }
+
+  private admit(msg: Record<string, unknown>, transportId: string, peer?: ConnectedPeer) {
+    if (peer) {
+      if (peer.id === msg.peerId && peer.id !== this.selfId) this.broadcastState(transportId)
+      return
+    }
+    const name = typeof msg.name === 'string' ? sanitizeName(msg.name) : null
+    if (!idValido(msg.peerId) || !name || this.peers.some((p) => p.id === msg.peerId)) return
+    if (isRoomFull(this.peers.length)) {
+      this.opts.send({ t: 'roomFull', salaId: this.opts.salaId }, transportId)
+      return
+    }
+    this.peers = [...this.peers, { id: msg.peerId, name, transportId, joinTime: this.now() }]
+    this.emitRoom()
+    if (!this.handleAction({ t: 'playerJoined', peerId: msg.peerId }, this.selfId)) this.broadcastState()
+  }
+
+  private receiveState(msg: Record<string, unknown>, transportId: string) {
+    if (msg.juegoId !== this.juegoId || !idValido(msg.hostId) || msg.hostId === this.selfId
+      || (this.hostId && msg.hostId !== this.hostId)
+      || typeof msg.revision !== 'number' || !Number.isSafeInteger(msg.revision) || msg.revision <= this.revision
+      || typeof msg.gameRun !== 'number' || !Number.isSafeInteger(msg.gameRun)
+      || (this.revision > 0 && msg.gameRun < this.gameRun)
+      || !Array.isArray(msg.peers) || msg.peers.length > 20 || !msg.peers.every(peerValido)
+      || !record(msg.fullState) || msg.fullState.gameId !== this.juegoId
+      || typeof msg.fullState.phase !== 'string' || !Number.isSafeInteger(msg.fullState.version)
+      || msg.fullState.version !== msg.version) return
+    const peers: ConnectedPeer[] = msg.peers
+    if (new Set(peers.map((p) => p.id)).size !== peers.length
+      || new Set(peers.map((p) => p.transportId)).size !== peers.length
+      || !peers.some((p) => p.id === msg.hostId && p.transportId === transportId)
+      || !peers.some((p) => p.id === this.selfId && p.transportId === this.selfTransportId)
+      || (this.replication && !this.replication.validState(msg.fullState))) return
+
+    const newRun = this.gameRun !== msg.gameRun
+    if (newRun) {
+      this.recoveryDeck = null
+      this.recoveryState = null
+      this.pendingAnswer = null
+    }
+    this.revision = msg.revision
+    this.gameRun = msg.gameRun
+    this.hostId = msg.hostId
+    this.hostTransportId = transportId
+    this.disconnected.delete(transportId)
+    this.peers = peers
+    if (!this.syncedOnce || newRun || this.gameState.version !== msg.version) {
+      this.gameState = msg.fullState
+      this.opts.emit({ t: 'game', state: this.gameState })
+    }
+    this.emitRoom()
+    if (!this.syncedOnce) {
+      this.syncedOnce = true
+      this.salaFull = false
+      this.opts.emit({ t: 'synced' })
+    }
+  }
+
+  private receiveBackup(msg: Record<string, unknown>, transportId: string) {
+    if (msg.gameRun !== this.gameRun || !record(msg.state)) return
+    const deck = record(msg.deck) ? msg.deck : this.recoveryDeck
+    if (!deck) return
+    const state = { ...msg.state, ...deck }
+    if (typeof state.version !== 'number' || !this.replication?.validState(state)) return
+    if (record(msg.deck)) {
+      this.recoveryDeck = deck
+      this.opts.send({ t: 'deckAck', gameRun: this.gameRun }, transportId)
+    }
+    if (!this.recoveryState || state.version >= this.recoveryState.version) this.recoveryState = state
   }
 
   peerJoined(transportPeerId: string) {
-    // enviar hello (+ eco a los 2 s por si el primero se pierde)
-    const selfName = this.peers.find((p) => p.id === this.selfId)?.name || this.selfName
-    const hello = { t: 'hello', peerId: this.selfId, name: selfName, joinTime: this.now() }
-    this.send(hello)
-    this.delayed.push({ msg: { ...hello }, ticks: 2 })
-    // invitado aún sin sincronizar: pedir estado al aparecer un peer
-    if (!this.isHost && !this.syncedOnce) {
-      this.send({ t: 'requestState', from: this.selfId })
-    }
-    void transportPeerId
+    this.disconnected.delete(transportPeerId)
+    if (this.isHost || (this.hostTransportId && transportPeerId !== this.hostTransportId)) return
+    this.hello(transportPeerId)
+    this.delayedHellos.set(transportPeerId, this.tickCount + 2)
   }
 
   peerLeft(transportPeerId: string) {
-    const id = this.transportToLogicalPeer.get(transportPeerId) || transportPeerId
-    this.transportToLogicalPeer.delete(transportPeerId)
-    const wasHost = id === this.hostId
-    this.peers = this.peers.filter((p) => p.id !== id)
-    // joinOrder se mantiene para elección determinista, pero connected set cambia
-    const connected = new Set(this.peers.map((p) => p.id))
-    this.emitRoom()
-    // el que se fue no debe bloquear el "todos han respondido"
-    if (this.isHost && id !== this.selfId) {
-      this.handleAction({ t: 'playerLeft', peerId: id }, this.selfId)
+    this.delayedHellos.delete(transportPeerId)
+    const peer = this.peers.find((p) => p.transportId === transportPeerId)
+    if (!peer || peer.id === this.selfId) return
+    this.disconnected.add(transportPeerId)
+    if (this.isHost) {
+      this.removePeer(peer.id)
+      return
     }
-    if (wasHost) {
-      const newHost = electNewHost(this.joinOrder, connected)
-      if (newHost) {
-        this.hostId = newHost
-        const amNewHost = newHost === this.selfId
-        this.isHost = amNewHost
-        this.emitRoom()
-        if (amNewHost) {
-          this.emitEv({ t: 'toast', msg: 'El anfitrión se fue — ahora eres el anfitrión' })
-          this.broadcastState()
-        } else {
-          const nm = this.peers.find((p) => p.id === newHost)?.name || newHost.slice(0, 4)
-          this.emitEv({ t: 'toast', msg: 'Anfitrión migrado a ' + nm })
-        }
-      } else {
-        this.emitEv({ t: 'toast', msg: 'Sala vacía' })
-      }
+    if (peer.id !== this.hostId) return
+
+    this.peers = this.peers.filter((p) => p.id !== peer.id)
+    const reachable = new Set(this.peers.filter((p) => !this.disconnected.has(p.transportId)).map((p) => p.id))
+    const nextId = electNewHost(this.peers.map((p) => p.id), reachable)
+    const next = this.peers.find((p) => p.id === nextId)
+    if (!next) return
+    this.hostId = next.id
+    this.hostTransportId = next.transportId
+    this.isHost = next.id === this.selfId
+    this.revision = 0
+    this.emitRoom()
+    if (!this.isHost) {
+      this.opts.emit({ t: 'toast', msg: 'Anfitrión migrado a ' + next.name })
+      return
+    }
+
+    this.opts.emit({ t: 'toast', msg: 'El anfitrión se fue — ahora eres el anfitrión' })
+    if (this.recoveryState) {
+      this.gameState = { ...this.recoveryState, version: Math.max(this.gameState.version, this.recoveryState.version) + 1 }
+    } else if (this.replication && this.gameState.phase !== 'lobby' && this.gameState.phase !== 'final') {
+      this.gameState = { ...this.gameState, phase: 'final', version: this.gameState.version + 1 }
+      this.opts.emit({ t: 'toast', msg: 'Se conservan los puntos. Vuelve al lobby para jugar otra partida.' })
+    }
+    const departed = this.peers.filter((p) => this.disconnected.has(p.transportId))
+    this.peers = this.peers.filter((p) => !this.disconnected.has(p.transportId))
+    const game = this.opts.getGameModule(this.juegoId)
+    for (const id of [peer.id, ...departed.map((p) => p.id)]) {
+      if (game) this.gameState = game.reducer(this.gameState, { t: 'playerLeft', peerId: id }, {
+        isHost: true, peerId: this.selfId
+      })
+    }
+    this.recoveryState = null
+    this.recoveryDeck = null
+    this.deckConfirmedBy = null
+    this.emitRoom()
+    this.opts.emit({ t: 'game', state: this.gameState })
+    this.broadcastState()
+  }
+
+  private removePeer(id: string) {
+    this.peers = this.peers.filter((p) => p.id !== id)
+    this.receivedAnswers.delete(id)
+    this.emitRoom()
+    if (!this.handleAction({ t: 'playerLeft', peerId: id }, this.selfId)) {
+      this.opts.emit({ t: 'game', state: this.gameState })
+      this.broadcastState()
     }
   }
 }

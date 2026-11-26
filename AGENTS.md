@@ -6,7 +6,7 @@
 
 **Este repo ES el juego wg_hipster**, no una plantilla. Juego de fiesta multijugador en navegador, 100 % estático (GitHub Pages), sin backend ni base de datos.
 Flujo: crear sala → compartir enlace `#/sala/<id>` → lobby (1–20 jugadores) → hipster musical por turnos.
-Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hipster_v1_'+salaId`). Host-autoritativo lógico con migración de host. UI en español.
+Red P2P con Trystero (`torrent` por defecto, trackers públicos, sin cuentas; `appId='wg_hipster_v1_'+salaId`). Supabase es opcional y requiere un proyecto. El anfitrión valida el estado y las acciones. UI en español.
 
 ## Dónde está la arquitectura
 
@@ -17,29 +17,29 @@ Red P2P con Trystero (`torrent`, trackers públicos, sin cuentas; `appId='wg_hip
 ## Mapa de código
 
 - `src/App.svelte`, `src/main.ts` — entrada + router hash (`#/` → Landing, `#/sala/<id>` → Room)
-- `src/routes/{Landing,Room,Game}.svelte` — páginas; `Room.svelte` contiene la lógica P2P agnóstica al juego (hello/requestState/stateSync/action/rename, heartbeat 2 s, tick host 1 s, `electNewHost`; un solo juego) + vigía de señalización (línea `Señalización X/Y`, aviso fantasma al host con recarga, rejoin rápido del invitado si 0 trackers, recarga dura topada x2 si sigue sin sync)
+- `src/routes/{Landing,Room,Game}.svelte` — páginas; `Room.svelte` conecta la UI al transporte y a `SyncNode`, genera invitaciones con la señalización activa y supervisa la conexión (reintentos, recargas limitadas y aviso al agotarse)
 - `src/components/{PlayerList,ShareLink,NameInput,KoFi}.svelte` — UI lobby + píldora ko-fi (landing/lobby/espera/resultados)
 - `src/app.css` + `src/lib/stores/theme.ts` + `src/components/ThemeToggle.svelte` — estilo festival póster dual (claro/oscuro según sistema + toggle persistido)
 - `src/lib/game/hipster/colores.ts` — color dinámico de carátula (Canvas + contraste WCAG AA, store `tinteActual`)
-- `src/lib/net/{types,trysteroAdapter,room,transport,turn}.ts` — `Msg`, adapter Trystero multi-estrategia (`supabase` por defecto con proyecto común para tardíos; `torrent` opt-in con `appId='wg_hipster_v1_'+salaId`, 4 trackers verificados 2026-09-09, 5 STUN + TURN opcional vía `turn.ts` para NAT simétrica), `electNewHost`/`isRoomFull`, `relayStatus()` (solo torrent); `signaling.ts` (`?net=`, `?supaUrl/Key`, localStorage); `debug.ts` (log exportable con `?debug=1` o botón: red+protocolo+consola+visibilidad, build id, sonda de broadcast, reanuncio al volver de 2º plano, copiar/descargar); `iceCheck.ts` (botón Probar mi red: gathering local + veredicto P2P_OK/SOLO_TURN/NO_P2P); `scripts/patch-trystero.js` (postinstall) corrige la fuga del offer pool de trystero 0.20.1 (40 RTCPeerConnection fugadas por ciclo → sala fantasma a los minutos); hooks solo-e2e vía query del hash: `transport.trackerUrls()` acepta `?tracker=ws://…` (repetible) y el adapter `?lagMs=&lossPct=` (móvil lento simulado)
-- `src/lib/net/syncEngine.ts` — `SyncNode`: protocolo P2P (hello+eco/requestState/stateSync/action/rename, heartbeat 2 s, tick 1 s, migración de host); el invitado se incluye desde el inicio, reintenta sync y emite `synced`
-- `src/lib/stores/{roomStore,gameStore}.ts` — `roomStore` (sala/peers/joinOrder/isHost) + `gameStore` (aplica `stateSync` solo si versión mayor)
+- `src/lib/net/{types,trysteroAdapter,room,transport,turn}.ts` — tipos de jugadores, adapter Trystero multi-estrategia (`supabase` opcional con proyecto propio; `torrent` por defecto con `appId='wg_hipster_v1_'+salaId`, 4 trackers verificados 2026-09-09, 5 STUN + TURN opcional vía `turn.ts` para NAT simétrica), `electNewHost`/`isRoomFull`, `relayStatus()` (solo torrent); `signaling.ts` (`?net=`, `?supaUrl/Key`, localStorage); `debug.ts` (log exportable con `?debug=1` o botón: red+protocolo+consola+visibilidad, build id, sonda de broadcast, reanuncio al volver de 2º plano, copiar/descargar); `iceCheck.ts` (botón Probar mi red: gathering local + veredicto P2P_OK/SOLO_TURN/NO_P2P); `scripts/patch-trystero.js` (postinstall) corrige la fuga del offer pool de trystero 0.20.1 (40 RTCPeerConnection fugadas por ciclo → sala fantasma a los minutos); hooks solo-e2e vía query del hash: `transport.trackerUrls()` acepta `?tracker=ws://…` (repetible) y el adapter `?lagMs=&lossPct=` (móvil lento simulado)
+- `src/lib/net/syncEngine.ts` — `SyncNode`: admisión y acciones ligadas a la conexión, instantáneas por destinatario y migración de host. La vista del invitado oculta los datos privados de la ronda. Solo el sucesor recibe una copia de recuperación separada
+- `src/lib/stores/{roomStore,gameStore}.ts` — `roomStore` (sala/peers/joinOrder/isHost) + `gameStore` (vista validada por `SyncNode`)
 - `src/lib/game/{types,registry}.ts` — contrato `GameModule` y registry dinámico por `juegoId`
-- `src/lib/game/hipster/` — juego wg_hipster (modos título/año, dificultad + pistas, autoplay, charts iTunes + buscador + playlists Deezer por JSONP); dificultad experto en modo título: sin opciones, texto libre, corrección del host (buena/mala + extra +50) con pantalla de espera
+- `src/lib/game/hipster/` — juego wg_hipster (modos título/año, dificultad + pistas, autoplay, charts iTunes y búsqueda de álbumes y artistas por JSON); dificultad experto en modo título: sin opciones, texto libre, corrección del host (buena/mala + extra +50) con pantalla de espera
 - `src/lib/utils/{id,names}.ts` — `generateSalaId` (6 chars), `randomName` (Animal+Adjetivo 20×20, con excluidos), `sanitizeName`
 - `vite.config.ts` — `base=VITE_BASE || '/wg_hipster/'`, `server/preview` con `host:true, strictPort:true` (devcontainer)
 - `.devcontainer/devcontainer.json` + `post-create.sh` — imagen `typescript-node:22`, puertos 5173/4173
 - `.github/workflows/pages.yml` — build (`VITE_BASE=/wg_hipster/`) + `deploy-pages@v4`
-- `tests/unit/` — 103 tests (hipster 31, salaN 10, rondaRobusta 3, robustez+transporte 6+2, turn 7, debug 8, iceCheck 4, signaling 3, nombres 7, tema 2, colores 6, qr 2); `tests/e2e/` — 21 casos: P2P real 2 contextos + `multijugador.spec.ts` (salas P2P reales 5/10/15/20 escalonado + 15 en ráfaga + 8 con mitad lenta vía tracker local `bittorrent-tracker` devDep, con aserción `Señalización: 1/1`; `E2E_PUBLIC` usa trackers de producción bajo demanda; `E2E_AGE_MIN`/`E2E_AGE_N` opt-in para sala envejecida + tardío (caza sala fantasma); vars `E2E_PEERS`, `E2E_BURST`, `E2E_SLOW`, `E2E_PUBLIC`, `E2E_JOIN_GAP_MS`, `E2E_CONVERGE_MS`, `E2E_LAG_MS`, `E2E_LOSS_PCT`, `E2E_SLOW_HOST`; `E2E_NET=supabase` + `E2E_SUPA_URL/KEY` usan Supabase en el e2e (requiere proyecto); `E2E_NET=torrent` fuerza trackers; `E2E_DEBUG=1` vuelca el log debug de cada jugador al fallar; nota: 3 de los 6 trackers públicos fallan —btorrent.xyz, webtorrent.io, files.fm— y la redundancia lo absorbe)
+- `tests/unit/` cubre motor, protocolo P2P y utilidades. `tests/e2e/` prueba WebRTC real con tracker local, el relevo del anfitrión y salas de 5 a 20 jugadores. Consulta `tests/e2e/multijugador.spec.ts` para las variantes de pérdida, sala envejecida y señalización pública o Supabase.
 ## Comandos (Node 22)
 
 ```bash
 npm ci            # instalar (postCreate del devcontainer ya lo hace)
 npm run dev       # http://localhost:5173
-npm run test      # vitest run (103 tests)
+npm run test      # vitest run
 npm run check     # svelte-check + tsc
 npm run build     # dist/ para Pages
-npm run test:e2e  # Playwright; E2E_P2P=1 hace obligatorio el caso de trackers
+npm run test:e2e  # Playwright con WebRTC real y tracker local
 ```
 
 ## Estado a 2026-09-05

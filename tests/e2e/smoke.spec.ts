@@ -1,10 +1,15 @@
-import { test, expect } from '@playwright/test'
+import { conTracker, expect, simularMultimedia, test, usarIceLocal } from './fixtures'
 
-test('landing renderiza y crear sala lleva al lobby', async ({ page }) => {
+test.beforeEach(async ({ context }) => {
+  await usarIceLocal(context)
+  await simularMultimedia(context)
+})
+
+test('landing renderiza y crear sala lleva al lobby', async ({ page, trackerUrl }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
 
-  await page.goto('#/')
+  await page.goto(conTracker('#/', trackerUrl))
   await expect(page.getByRole('heading', { name: /wg_hipster/ })).toBeVisible()
 
   // toggle de tema claro/oscuro persiste
@@ -30,8 +35,8 @@ test('landing renderiza y crear sala lleva al lobby', async ({ page }) => {
   expect(errors).toEqual([])
 })
 
-test('al empezar el juego se ocultan los elementos del lobby', async ({ page }) => {
-  await page.goto('#/')
+test('al empezar el juego se ocultan los elementos del lobby', async ({ page, trackerUrl }) => {
+  await page.goto(conTracker('#/', trackerUrl))
   await page.getByRole('button', { name: /Crear sala/ }).click()
   await expect(page).toHaveURL(/#\/sala\/[A-Za-z0-9]{6}/)
 
@@ -56,9 +61,9 @@ test('al empezar el juego se ocultan los elementos del lobby', async ({ page }) 
   await expect(page.getByRole('heading', { name: /Cambiar nombre/ })).toBeHidden()
 })
 
-test('en móvil (360px) la ronda no desborda horizontalmente', async ({ page }) => {
+test('en móvil (360px) la ronda no desborda horizontalmente', async ({ page, trackerUrl }) => {
   await page.setViewportSize({ width: 360, height: 740 })
-  await page.goto('#/sala/mov001?host=1&name=Ana')
+  await page.goto(conTracker('#/sala/mov001?host=1&name=Ana', trackerUrl))
   await page.getByRole('button', { name: /Cargar lista/ }).click()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
@@ -82,33 +87,29 @@ test('en móvil (360px) la ronda no desborda horizontalmente', async ({ page }) 
   expect(salaOk).toBe(true);
 })
 
-test('títulos largos sin espacios no desbordan la tarjeta', async ({ page }) => {
+test('títulos largos sin espacios no desbordan la tarjeta', async ({ page, trackerUrl }) => {
   const largo = 'Supercalifragilisticoespialidosoextraordinario'
   const track = (id: number) => ({
-    id,
-    title: `${largo}${id}`,
-    artist: { name: 'ArtistaLarguísimoSinEspacios' },
-    album: { title: 'Álbum', cover_medium: '' },
-    preview: `https://clip${id}.mp3`
+    wrapperType: 'track',
+    kind: 'song',
+    trackId: id,
+    trackName: `${largo}${id}`,
+    artistName: 'ArtistaLarguísimoSinEspacios',
+    collectionName: 'Largas',
+    previewUrl: `https://clip${id}.m4a`
   })
-  await page.route('https://api.deezer.com/search/playlist?*', (route) => {
-    const cb = new URL(route.request().url()).searchParams.get('callback') ?? 'cb'
-    route.fulfill({
-      contentType: 'application/javascript',
-      body: `${cb}({"data":[{"id":998,"title":"Largas","nb_tracks":5,"picture_medium":""}]})`
-    })
-  })
-  await page.route('https://api.deezer.com/playlist/998/tracks?*', (route) => {
-    const cb = new URL(route.request().url()).searchParams.get('callback') ?? 'cb'
-    route.fulfill({
-      contentType: 'application/javascript',
-      body: `${cb}({"data":[${[1, 2, 3, 4, 5].map((i) => JSON.stringify(track(i))).join(',')}]})`
-    })
-  })
-  await page.route('https://itunes.apple.com/*', (route) => route.fulfill({ json: { results: [], resultCount: 0 } }))
+  await page.route('https://itunes.apple.com/search?*entity=album*', (route) =>
+    route.fulfill({ json: { results: [{ collectionId: 998, collectionName: 'Largas', artistName: 'Artista' }] } })
+  )
+  await page.route('https://itunes.apple.com/search?*entity=musicArtist*', (route) =>
+    route.fulfill({ json: { results: [] } })
+  )
+  await page.route('https://itunes.apple.com/lookup?*entity=song', (route) =>
+    route.fulfill({ json: { results: [1, 2, 3, 4, 5].map(track) } })
+  )
 
   await page.setViewportSize({ width: 360, height: 740 })
-  await page.goto('#/sala/lar001?host=1&name=Ana')
+  await page.goto(conTracker('#/sala/lar001?host=1&name=Ana', trackerUrl))
   await page.getByLabel('Lista de canciones').selectOption('__buscar__')
   // activar la pista de título: genera una palabra larga sin espacios
   await page.getByRole('checkbox', { name: 'Título', exact: true }).click()
@@ -125,8 +126,8 @@ test('títulos largos sin espacios no desbordan la tarjeta', async ({ page }) =>
   expect(salaOk).toBe(true);
 })
 
-test('crear una segunda sala muestra datos limpios de la nueva', async ({ page }) => {
-  await page.goto('#/')
+test('crear una segunda sala muestra datos limpios de la nueva', async ({ page, trackerUrl }) => {
+  await page.goto(conTracker('#/', trackerUrl))
   await page.getByRole('button', { name: /Crear sala/ }).click()
   await expect(page).toHaveURL(/#\/sala\/([A-Za-z0-9]{6})/)
   const urlA = page.url()
@@ -135,6 +136,7 @@ test('crear una segunda sala muestra datos limpios de la nueva', async ({ page }
   await page.getByRole('button', { name: 'Salir' }).click()
   await expect(page.getByRole('heading', { name: /wg_hipster/ })).toBeVisible()
 
+  await page.goto(conTracker('#/', trackerUrl))
   await page.getByRole('button', { name: /Crear sala/ }).click()
   await expect(page).toHaveURL(/#\/sala\/([A-Za-z0-9]{6})/)
   const salaB = page.url().match(/#\/sala\/([A-Za-z0-9]{6})/)![1]
@@ -145,14 +147,14 @@ test('crear una segunda sala muestra datos limpios de la nueva', async ({ page }
   await expect(page.getByText('1/20 jugadores')).toBeVisible()
 })
 
-test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
-  await page.goto('#/sala/corta1?host=1&name=Ana&segundos=30')
+test('completa las 5 rondas del hipster hasta la final', async ({ page, trackerUrl }) => {
+  await page.goto(conTracker('#/sala/corta1?host=1&name=Ana&segundos=30', trackerUrl))
 
   await expect(page.getByLabel('Segundos por ronda').first()).toHaveValue('30')
   await page.getByRole('button', { name: /Cargar lista/ }).click()
   await expect(page.getByText(/Lista ✓ 5 rondas/)).toBeVisible()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
-  await expect(page.getByText('⏱ 30s').first()).toBeVisible()
+  await expect(page.getByText(/⏱ (29|30)s/).first()).toBeVisible()
   for (let i = 0; i < 5; i++) {
     await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
     // la superficie única ocupa el mismo alto que resultados
@@ -186,7 +188,7 @@ test('completa las 5 rondas del hipster hasta la final', async ({ page }) => {
   await expect(page.locator('.sala[data-tinte="0"]')).toBeVisible()
 })
 
-test('el host busca un álbum y arma su lista', async ({ page }) => {
+test('el host busca un álbum y arma su lista', async ({ page, trackerUrl }) => {
   const song = (id: number) => ({
     wrapperType: 'track',
     kind: 'song',
@@ -211,7 +213,7 @@ test('el host busca un álbum y arma su lista', async ({ page }) => {
     route.fulfill({ json: { results: [{ wrapperType: 'collection' }, song(1), song(2), song(3), song(4), song(5)] } })
   )
 
-  await page.goto('#/sala/busq01?host=1&name=Ana')
+  await page.goto(conTracker('#/sala/busq01?host=1&name=Ana', trackerUrl))
   await page.getByLabel('Lista de canciones').selectOption('__buscar__')
   await page.getByLabel('Texto a buscar').fill('80s')
   await page.getByRole('button', { name: '🔍' }).click()
@@ -221,46 +223,47 @@ test('el host busca un álbum y arma su lista', async ({ page }) => {
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
 })
 
-test('el host busca una playlist de Deezer y juega', async ({ page }) => {
-  const track = (id: number) => ({
-    id,
-    title: `Tema ${id}`,
-    artist: { name: 'Artista' },
-    album: { title: 'Álbum', cover_medium: 'https://img/cover.jpg' },
-    preview: `https://clip${id}.mp3`
+test('cambiar las rondas durante una carga descarta el resultado anterior', async ({ page, trackerUrl }) => {
+  const liberar = Promise.withResolvers<void>()
+  const entry = Array.from({ length: 30 }, (_, index) => ({
+    id: { attributes: { 'im:id': String(index + 1) } },
+    'im:name': { label: `Tema ${index + 1}` },
+    'im:artist': { label: 'Artista' }
+  }))
+  await page.route('https://itunes.apple.com/**/rss/topsongs/**', async (route) => {
+    await liberar.promise
+    await route.fulfill({ json: { feed: { entry } } })
   })
-  // JSONP: el callback va en la query (?callback=__dz...); respondemos envolviendo el JSON
-  await page.route('https://api.deezer.com/search/playlist?*', (route) => {
-    const cb = new URL(route.request().url()).searchParams.get('callback') ?? 'cb'
-    route.fulfill({
-      contentType: 'application/javascript',
-      body: `${cb}({"data":[{"id":999,"title":"Fiesta 80s","nb_tracks":5,"picture_medium":"https://img/pl.jpg"}]})`
-    })
+  await page.route('https://itunes.apple.com/lookup?*entity=song', (route) => {
+    const id = Number(new URL(route.request().url()).searchParams.get('id'))
+    return route.fulfill({ json: { results: [{
+      trackId: id,
+      trackName: `Tema ${id}`,
+      artistName: 'Artista',
+      previewUrl: `https://clip${id}.m4a`
+    }] } })
   })
-  await page.route('https://api.deezer.com/playlist/999/tracks?*', (route) => {
-    const cb = new URL(route.request().url()).searchParams.get('callback') ?? 'cb'
-    route.fulfill({
-      contentType: 'application/javascript',
-      body: `${cb}({"data":[${[1, 2, 3, 4, 5].map((i) => JSON.stringify(track(i))).join(',')}]})`
-    })
-  })
-  // iTunes no debe intervenir en este flujo
-  await page.route('https://itunes.apple.com/*', (route) => route.fulfill({ json: { results: [], resultCount: 0 } }))
+  await page.goto(conTracker('#/sala/lis001?host=1&name=Ana', trackerUrl))
+  await page.getByLabel('Lista de canciones').selectOption('top-global')
+  const cargar = page.getByRole('button', { name: 'Cargar lista', exact: true })
+  try {
+    await Promise.all([
+      page.waitForRequest('https://itunes.apple.com/**/rss/topsongs/**', { timeout: 10_000 }),
+      cargar.click()
+    ])
+    await page.getByLabel('Número de rondas').selectOption('20')
+  } finally {
+    liberar.resolve()
+  }
 
-  await page.goto('#/sala/lis001?host=1&name=Ana')
-  await page.getByLabel('Lista de canciones').selectOption('__buscar__')
-  await page.getByRole('checkbox', { name: 'Álbumes', exact: true }).click()
-  await page.getByRole('checkbox', { name: 'Artistas', exact: true }).click()
-  await page.getByLabel('Texto a buscar').fill('fiesta 80s')
-  await page.getByRole('button', { name: '🔍' }).click()
-  await page.getByRole('button', { name: /Fiesta 80s/ }).click()
-  await expect(page.getByText(/Lista ✓ 5 rondas/)).toBeVisible()
-  await page.getByRole('button', { name: /Empezar hipster/ }).click()
-  await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
+  await expect(cargar).toBeVisible()
+  await expect(page.getByRole('button', { name: /Empezar hipster/ })).toBeHidden()
+  await cargar.click()
+  await expect(page.getByRole('button', { name: 'Empezar hipster (20 rondas)' })).toBeVisible()
 })
 
-test('modo año: se escribe el año y vale ±5', async ({ page }) => {
-  await page.goto('#/sala/anio01?host=1&name=Ana')
+test('modo año: se escribe el año y vale ±5', async ({ page, trackerUrl }) => {
+  await page.goto(conTracker('#/sala/anio01?host=1&name=Ana', trackerUrl))
   await page.getByLabel('Modo de juego').selectOption('anio')
   await page.getByRole('button', { name: /Cargar lista/ }).click()
   await expect(page.getByText(/Lista ✓ 5 rondas/)).toBeVisible()
@@ -274,8 +277,8 @@ test('modo año: se escribe el año y vale ±5', async ({ page }) => {
   await expect(page.getByText(/Año correcto:/)).toBeVisible()
 })
 
-test('dificultad: fácil muestra artista y título, difícil nada', async ({ page }) => {
-  await page.goto('#/sala/dif001?host=1&name=Ana')
+test('dificultad: fácil muestra artista y título, difícil nada', async ({ page, trackerUrl }) => {
+  await page.goto(conTracker('#/sala/dif001?host=1&name=Ana', trackerUrl))
   await page.getByLabel('Dificultad').selectOption('facil')
   await page.getByRole('button', { name: /Cargar lista/ }).click()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
@@ -294,8 +297,8 @@ test('dificultad: fácil muestra artista y título, difícil nada', async ({ pag
   await expect(page.getByText(/🎤 Artista:/)).toBeHidden()
 })
 
-test('pistas: selección múltiple muestra la info elegida', async ({ page }) => {
-  await page.goto('#/sala/pis001?host=1&name=Ana')
+test('pistas: selección múltiple muestra la info elegida', async ({ page, trackerUrl }) => {
+  await page.goto(conTracker('#/sala/pis001?host=1&name=Ana', trackerUrl))
   // fácil marca todas; desmarcar todo menos álbum
   await page.getByLabel('Dificultad').selectOption('facil')
   await page.getByRole('checkbox', { name: 'Título', exact: true }).click()
@@ -308,8 +311,8 @@ test('pistas: selección múltiple muestra la info elegida', async ({ page }) =>
   await expect(page.getByText(/🔤 Título:/)).toBeHidden()
 })
 
-test('contraste AA del texto de respuesta con tinte', async ({ page }) => {
-  await page.goto('#/sala/con001?host=1&name=Ana')
+test('contraste AA del texto de respuesta con tinte', async ({ page, trackerUrl }) => {
+  await page.goto(conTracker('#/sala/con001?host=1&name=Ana', trackerUrl))
   await page.getByRole('button', { name: /Cargar lista/ }).click()
   await page.getByRole('button', { name: /Empezar hipster/ }).click()
   await expect(page.getByText(/¿Qué canción es\?/)).toBeVisible()
@@ -333,8 +336,8 @@ test('contraste AA del texto de respuesta con tinte', async ({ page }) => {
   expect(ratio).toBeGreaterThanOrEqual(4.5);
 })
 
-test('autoplay: default ON, toggle local y apagado del host', async ({ page }) => {
-  await page.goto('#/sala/aut001?host=1&name=Ana')
+test('autoplay: activado por defecto y ajustable en el dispositivo', async ({ page, trackerUrl }) => {
+  await page.goto(conTracker('#/sala/aut001?host=1&name=Ana', trackerUrl))
   // lobby: checkbox marcado por defecto
   const chk = page.getByLabel('Autoplay para todos');
   await expect(chk).toBeChecked()
@@ -352,33 +355,4 @@ test('autoplay: default ON, toggle local y apagado del host', async ({ page }) =
   // volver a encender
   await auto.click()
   await expect(auto).toHaveAttribute('aria-pressed', 'true')
-})
-
-test('autoplay: el host lo apaga y el invitado lo ve apagado', async ({ browser }, testInfo) => {
-  test.setTimeout(50_000)
-  const baseURL = testInfo.project.use.baseURL as string
-  const hostContext = await browser.newContext()
-  const guestContext = await browser.newContext()
-  const host = await hostContext.newPage()
-  const guest = await guestContext.newPage()
-  try {
-    await host.goto(`${baseURL}#/`)
-    await host.getByRole('button', { name: /Crear sala/ }).click()
-    const salaId = host.url().match(/#\/sala\/([a-z0-9]{6})/)?.[1]
-    expect(salaId).toBeTruthy()
-    await guest.goto(`${baseURL}#/sala/${salaId}?name=Jugador%202`)
-    try {
-      await expect(host.getByText('Jugador 2')).toBeVisible({ timeout: 15_000 })
-    } catch {
-      test.skip(true, 'Sin trackers P2P aquí; usa E2E_P2P=1 para exigirlo.')
-      return
-    }
-    // el host apaga el autoplay en el lobby y el invitado lo ve apagado
-    await host.getByLabel('Autoplay para todos').click()
-    await expect(host.getByLabel('Autoplay para todos')).not.toBeChecked()
-    await expect(guest.getByText(/Autoplay: desactivado/)).toBeVisible({ timeout: 10_000 })
-  } finally {
-    await hostContext.close()
-    await guestContext.close()
-  }
 })

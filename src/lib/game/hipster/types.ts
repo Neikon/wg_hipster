@@ -35,6 +35,8 @@ export interface HipsterState {
   respuestaCorrecta: number
   /** En experto la respuesta es el texto escrito; si no, el índice de opción. */
   respuestas: Record<string, number | string> // peerId -> opcion idx o texto
+  /** En la vista del invitado, indica quién respondió sin revelar su respuesta. */
+  respondieron?: string[]
   /**
    * Corrección del host en experto (peerId -> veredicto). Vive en el estado
    * para viajar por stateSync y sobrevivir a la migración de host.

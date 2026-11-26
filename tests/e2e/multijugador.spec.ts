@@ -1,16 +1,12 @@
-import { test, expect, type BrowserContext, type Page } from '@playwright/test'
-import { Server as TrackerServer } from 'bittorrent-tracker'
+import type { BrowserContext, Page } from '@playwright/test'
+import { conTracker, expect, test, usarIceLocal } from './fixtures'
 
 /**
  * Sala P2P REAL con N jugadores: N Chromiums con WebRTC de verdad (Trystero
  * torrent strategy + la app sin modificar, mismo SyncNode de producción).
  *
- * La única pieza no productiva es la señalización: en vez de los trackers
- * públicos se usa un tracker BitTorrent local (bittorrent-tracker) inyectado
- * vía `?tracker=ws://127.0.0.1:PUERTO` (hook test-only en transport.ts).
- * Todo lo demás es idéntico a una fiesta real: STUN de producción, data
- * channels WebRTC entre todos los pares (malla completa), hellos,
- * requestState/stateSync, heartbeats y reintentos del SyncNode.
+ * Por defecto usa un tracker BitTorrent local y candidatos ICE locales.
+ * Los data channels WebRTC, el protocolo y los reintentos son los de la app.
  *
  * Escenarios:
  * - escalonado: el host crea la sala y los invitados se unen con JOIN_GAP_MS
@@ -32,12 +28,11 @@ import { Server as TrackerServer } from 'bittorrent-tracker'
  *   E2E_BURST="15"          tamaños de sala en ráfaga ("" = ninguno)
  *   E2E_SLOW="8"            tamaños de sala con mitad lenta ("" = ninguno)
  *   E2E_PUBLIC=""           tamaños de sala vía trackers públicos ("" = ninguno)
- *   E2E_NET=""              estrategia (torrent|supabase; por defecto supabase
- *                         con el proyecto común; "torrent" usa tracker local)
- *   E2E_SUPA_URL=""         URL del proyecto Supabase (por defecto el común)
- *   E2E_SUPA_KEY=""         clave del proyecto Supabase (por defecto la común)
+ *   E2E_NET="torrent"       "supabase" prueba explícitamente un proyecto propio
+ *   E2E_SUPA_URL=""         URL del proyecto Supabase (requerida para supabase)
+ *   E2E_SUPA_KEY=""         clave publicable de Supabase (requerida para supabase)
  *   E2E_AGE_MIN=0           minutos de envejecido (0 = no probar); E2E_AGE_N=4
- *   E2E_TRACKER_PORT=18923  puerto ws del tracker local
+ *   E2E_TRACKER_PORT=0      puerto local (0 = asignación automática)
  *   E2E_JOIN_GAP_MS=1200    pausa entre uniones escalonadas
  *   E2E_CONVERGE_MS=150000  tiempo máx. de convergencia por sala
  *   E2E_LAG_MS=600         retardo base (ms) de los peers lentos
@@ -64,21 +59,19 @@ const SLOW_HOST = process.env.E2E_SLOW_HOST === '1'
 /** E2E_DEBUG=1 añade &debug=1 y vuelca el log de cada jugador al fallar. */
 const E2E_DEBUG = process.env.E2E_DEBUG === '1'
 const DEBUG_Q = E2E_DEBUG ? 'debug=1' : ''
-/** Estrategia: torrent (trackers) o supabase. Por defecto, la de la app (supabase con proyecto común). */
-const E2E_NET = process.env.E2E_NET === 'torrent' ? 'torrent' : 'supabase'
+const E2E_NET = process.env.E2E_NET || 'torrent'
 const E2E_SUPA_URL = process.env.E2E_SUPA_URL || ''
 const E2E_SUPA_KEY = process.env.E2E_SUPA_KEY || ''
-/** E2E_PUBLIC solo tiene sentido con E2E_NET=torrent (trackers de producción). */
-const SUPA_Q =
-  E2E_NET === 'supabase' && E2E_SUPA_URL && E2E_SUPA_KEY
-    ? `net=supabase&supaUrl=${encodeURIComponent(E2E_SUPA_URL)}&supaKey=${encodeURIComponent(E2E_SUPA_KEY)}`
-    : E2E_NET === 'supabase'
-      ? 'net=supabase'
-      : 'net=torrent'
+if (E2E_NET !== 'torrent' && E2E_NET !== 'supabase') {
+  throw new Error('E2E_NET debe ser torrent o supabase')
+}
+if (E2E_NET === 'supabase' && (!E2E_SUPA_URL || !E2E_SUPA_KEY)) {
+  throw new Error('E2E_NET=supabase requiere E2E_SUPA_URL y E2E_SUPA_KEY')
+}
 
-const TRACKER_PORT = parseInt(process.env.E2E_TRACKER_PORT || '18923', 10)
 const JOIN_GAP_MS = parseInt(process.env.E2E_JOIN_GAP_MS || '1200', 10)
 const CONVERGE_MS = parseInt(process.env.E2E_CONVERGE_MS || '150000', 10)
+test.use({ trackerPort: Number(process.env.E2E_TRACKER_PORT || '0') })
 
 interface Escenario {
   n: number
@@ -101,25 +94,6 @@ const ESCENARIOS: Escenario[] = [
   ...PUBLIC.map((n) => ({ n, tag: 'público', gap: JOIN_GAP_MS * 2, slowFrom: 0, lagMs: 0, lossPct: 0, publico: true, ageMin: 0 })),
   ...(AGE_MIN > 0 ? [{ n: AGE_N, tag: 'envejecido', gap: JOIN_GAP_MS, slowFrom: 0, lagMs: 0, lossPct: 0, publico: false, ageMin: AGE_MIN }] : [])
 ]
-
-let tracker: InstanceType<typeof TrackerServer> | null = null
-
-test.beforeAll(async () => {
-  tracker = new TrackerServer({ udp: false, http: true, ws: true, stats: false })
-  tracker.on('error', (e: unknown) => console.error('[tracker-test]', e))
-  tracker.on('warning', () => {})
-  await new Promise<void>((resolve, reject) => {
-    const t = tracker as NonNullable<typeof tracker>
-    t.once('error', (e: unknown) => reject(e))
-    t.listen(TRACKER_PORT, '127.0.0.1')
-    t.once('listening', () => resolve())
-  })
-})
-
-test.afterAll(async () => {
-  if (tracker) await new Promise<void>((resolve) => tracker!.close(() => resolve()))
-  tracker = null
-})
 
 interface Jugador {
   name: string
@@ -148,15 +122,19 @@ async function leerConteo(p: Page): Promise<string | null> {
 
 for (const esc of ESCENARIOS) {
   const { n, tag, gap } = esc
-  test(`sala P2P real con ${n} jugadores (${tag}): todos ven a todos`, async ({ browser }, testInfo) => {
+  test(`sala P2P real con ${n} jugadores (${tag}): todos ven a todos`, async ({ browser, baseURL, trackerUrl }) => {
     test.setTimeout(Math.max(240_000, CONVERGE_MS + 120_000) + esc.ageMin * 60_000 + 60_000)
-    const baseURL = testInfo.project.use.baseURL as string
     const salaId = genSalaId()
-    const trackerQ = `tracker=${encodeURIComponent(`ws://127.0.0.1:${TRACKER_PORT}`)}`
+    const usaSupabase = !esc.publico && E2E_NET === 'supabase'
+    const usaTrackerLocal = !esc.publico && !usaSupabase
+    const signal = usaSupabase
+      ? new URLSearchParams({ net: 'supabase', supaUrl: E2E_SUPA_URL, supaKey: E2E_SUPA_KEY })
+      : new URLSearchParams({ net: 'torrent' })
     const jugadores: Jugador[] = []
 
     const abrir = async (name: string, extra: string, net: string): Promise<Jugador> => {
       const ctx = await browser.newContext()
+      if (usaTrackerLocal) await usarIceLocal(ctx)
       const page = await ctx.newPage()
       const errors: string[] = []
       page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
@@ -169,12 +147,11 @@ for (const esc of ESCENARIOS) {
       })
       const query = extra ? `${extra}&name=${encodeURIComponent(name)}` : `name=${encodeURIComponent(name)}`
       const netQ = net ? `&${net}` : ''
-      const sigQ = esc.publico ? '' : `&${trackerQ}`
-      const supaQ = SUPA_Q ? `&${SUPA_Q}` : ''
       const dbgQ = DEBUG_Q ? `&${DEBUG_Q}` : ''
-      await page.goto(`${baseURL}#/sala/${salaId}?${query}${sigQ}${netQ}${supaQ}${dbgQ}`)
       const j: Jugador = { name, ctx, page, errors }
       jugadores.push(j)
+      const hash = `#/sala/${salaId}?${query}&${signal}${netQ}${dbgQ}`
+      await page.goto(`${baseURL}${usaTrackerLocal ? conTracker(hash, trackerUrl) : hash}`)
       return j
     }
 
@@ -187,7 +164,7 @@ for (const esc of ESCENARIOS) {
       await expect(host.page.getByText('1/20 jugadores')).toBeVisible({ timeout: 30_000 })
       if (!esc.publico) {
         // supabase muestra línea propia; con tracker local hay 1/1
-        const objetivoSig = E2E_NET === 'supabase' ? 'Señalización: Supabase' : 'Señalización: 1/1 trackers'
+        const objetivoSig = usaSupabase ? 'Señalización: Supabase' : 'Señalización: 1/1 trackers'
         await expect(host.page.getByText(objetivoSig).first()).toBeVisible({ timeout: 30_000 })
       }
 

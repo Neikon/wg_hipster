@@ -14,9 +14,7 @@ export interface ListaRef {
   genre: string
 }
 
-// Todo Apple (RSS + Search + Lookup) envía `Access-Control-Allow-Origin: *`,
-// así que el host puede descargarlo directo desde el navegador. Deezer no
-// envía esa cabecera y el navegador bloquea su lectura: no usar.
+// Apple expone el catálogo al navegador como JSON.
 export const LISTAS: readonly ListaRef[] = [
   { id: 'top-global', nombre: 'Top global', fuente: 'itunes-rss', cc: 'us', genre: '' },
   { id: 'top-espana', nombre: 'Top España', fuente: 'itunes-rss', cc: 'es', genre: '' },
@@ -26,8 +24,7 @@ export const LISTAS: readonly ListaRef[] = [
   { id: 'top-reggaeton', nombre: 'Top Reggaeton', fuente: 'itunes-rss', cc: 'us', genre: '12' }
 ]
 
-// Reserva sin conexión: no sale en el desplegable, pero sigue siendo el
-// fallback (DEFAULT_CONFIG) y lo usan los tests sin red.
+// Lista inicial de cinco clips, sin consultar el catálogo.
 export const LISTA_FALLBACK = 'fiesta-clasicos'
 
 export function getLista(id: string): ListaRef | null {
@@ -74,7 +71,8 @@ function mapLookup(r: any): Crudo | null {
   }
 }
 
-async function fetchJson(url: string, timeoutMs = 12000): Promise<any> {  const ctrl = new AbortController()
+async function fetchJson(url: string, timeoutMs = 12000): Promise<any> {
+  const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const res = await fetch(url, { signal: ctrl.signal })
@@ -96,84 +94,6 @@ async function fetchConReintentos(url: string, intentos = 2): Promise<any> {
     }
   }
   throw last
-}
-
-let jsonpSeq = 0
-
-/**
- * Lee la API pública de Deezer por JSONP (<script> en vez de fetch),
- * porque no envía cabecera CORS y el navegador bloquearía la lectura.
- */
-export function jsonp<T>(baseUrl: string, timeoutMs = 12000): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    if (typeof document === 'undefined') {
-      reject(new Error('JSONP solo disponible en navegador'))
-      return
-    }
-    const cb = `__dz${Date.now()}_${jsonpSeq++}`
-    const sep = baseUrl.includes('?') ? '&' : '?'
-    const script = document.createElement('script')
-    const limpiar = () => {
-      clearTimeout(timer)
-      script.remove()
-      try {
-        delete (window as any)[cb]
-      } catch {
-        ;(window as any)[cb] = undefined
-      }
-    }
-    const timer = setTimeout(() => {
-      limpiar()
-      reject(new Error('Tiempo agotado'))
-    }, timeoutMs)
-    ;(window as any)[cb] = (data: T) => {
-      limpiar()
-      resolve(data)
-    }
-    script.onerror = () => {
-      limpiar()
-      reject(new Error('No se pudo cargar'))
-    }
-    script.src = `${baseUrl}${sep}output=jsonp&callback=${cb}`
-    document.head.appendChild(script)
-  })
-}
-
-/** Mapea un track de Deezer a nuestro formato (exportado para tests). */
-export function mapTrackDeezer(r: any): Crudo | null {
-  if (!r || typeof r.title !== 'string' || !r.artist?.name) return null
-  const titulo = r.title
-  let album = r.album?.title ?? ''
-  if (!mostrarAlbum({ titulo, album })) album = ''
-  return {
-    trackId: Number(r.id) || 0,
-    titulo,
-    artista: r.artist.name,
-    album,
-    previewUrl: typeof r.preview === 'string' ? r.preview : '',
-    artworkUrl: r.album?.cover_medium ?? r.artist?.picture_medium ?? '',
-    anio: anioDe(r.release_date)
-  }
-}
-
-/** Descarga los tracks de una playlist de Deezer (paginado, vía JSONP). */
-export async function fetchPlaylistDeezer(playlistId: number, max = 200): Promise<Crudo[]> {
-  const out: Crudo[] = []
-  let index = 0
-  while (out.length < max) {
-    const d = await jsonp<{ data?: any[]; total?: number }>(
-      `https://api.deezer.com/playlist/${playlistId}/tracks?limit=100&index=${index}`
-    )
-    const items = d?.data ?? []
-    for (const r of items) {
-      const m = mapTrackDeezer(r)
-      if (m) out.push(m)
-    }
-    if (items.length < 100) break
-    index += 100
-    await new Promise((r) => setTimeout(r, 300))
-  }
-  return out
 }
 
 interface EntradaRSS {
@@ -252,21 +172,27 @@ export interface PartidaLista {
 
 const CACHE_MS = 10 * 60 * 1000
 
-function leerCache(listaId: string): Crudo[] | null {
+interface CacheLista {
+  at: number
+  items: Crudo[]
+  pendientes?: EntradaRSS[]
+}
+
+function leerCache(listaId: string): CacheLista | null {
   try {
     const raw = sessionStorage.getItem(`hipster:lista:${listaId}`)
     if (!raw) return null
-    const { at, items } = JSON.parse(raw)
-    if (Date.now() - at > CACHE_MS) return null
-    return items
+    const cache: CacheLista = JSON.parse(raw)
+    if (Date.now() - cache.at > CACHE_MS || !Array.isArray(cache.items)) return null
+    return cache
   } catch {
     return null
   }
 }
 
-function guardarCache(listaId: string, items: Crudo[]): void {
+function guardarCache(listaId: string, items: Crudo[], pendientes?: EntradaRSS[]): void {
   try {
-    sessionStorage.setItem(`hipster:lista:${listaId}`, JSON.stringify({ at: Date.now(), items }))
+    sessionStorage.setItem(`hipster:lista:${listaId}`, JSON.stringify({ at: Date.now(), items, pendientes }))
   } catch {
     // almacenamiento lleno o no disponible: seguir sin caché
   }
@@ -296,31 +222,48 @@ export async function prepararPartida(
     return { tracks: pool.slice(0, Math.min(n, pool.length)), pool: [...TRACKS], descartados: 0 }
   }
 
-  let cache = leerCache(ref.id)
-  let entradas: EntradaRSS[]
-  if (cache) {
-    entradas = cache.map((c) => ({ trackId: c.trackId, titulo: c.titulo, artista: c.artista }))
-  } else {
+  const cache = leerCache(ref.id)
+  const completos = [...(cache?.items ?? [])]
+  const pistasConAnio = (c: Crudo) => !opts.requireAnio || c.anio !== null
+  let validos = completos.filter(pistasConAnio).length
+  let descartados = 0
+  let pendientes = cache?.pendientes
+  if (validos < n && !pendientes) {
+    let entradas: EntradaRSS[] | undefined
     try {
       entradas = await fetchChart(ref)
     } catch {
-      throw new Error('No se pudo descargar la lista (¿sin conexión?)')
+      if (completos.length < 4) throw new Error('No se pudo descargar la lista (¿sin conexión?)')
     }
-    if (entradas.length === 0) throw new Error('La lista vino vacía')
+    if (entradas) {
+      if (entradas.length === 0 && completos.length === 0) throw new Error('La lista vino vacía')
+      const cacheIds = new Set(completos.map((track) => track.trackId))
+      pendientes = entradas.filter((entrada) => !cacheIds.has(entrada.trackId))
+    }
   }
 
-  // Enriquecer por oleadas hasta completar las rondas (sin pedir de más).
-  const completos: Crudo[] = cache ? (cache as Crudo[]) : []
-  let descartados = 0
-  if (!cache) {
-    const objetivo = Math.min(n + 5, entradas.length)
-    const tanda = entradas.slice(0, Math.max(objetivo, 10))
-    const res = await mapLimit(tanda, 3, (e) => enriquecer(e, ref.cc))
-    for (const r of res) {
-      if (r) completos.push(r)
-      else descartados++
+  if (pendientes && validos < n) {
+    const ids = new Set(completos.map((track) => track.trackId))
+    let i = 0
+    while (validos < n && i < pendientes.length) {
+      const tanda = pendientes.slice(i, i + Math.max(n - validos + 5, 10))
+      i += tanda.length
+      for (const r of await mapLimit(tanda, 3, (e) => enriquecer(e, ref.cc))) {
+        if (!r) {
+          descartados++
+        } else if (!ids.has(r.trackId)) {
+          ids.add(r.trackId)
+          completos.push(r)
+          if (pistasConAnio(r)) validos++
+        }
+      }
     }
-    guardarCache(ref.id, completos)
+    // Otra carga del mismo chart puede haber avanzado mientras llegaban los lookups.
+    const resto = pendientes.slice(i)
+    const actualizado = leerCache(ref.id)
+    if (!actualizado?.pendientes || actualizado.pendientes.length >= resto.length) {
+      guardarCache(ref.id, completos, resto)
+    }
   }
   if (completos.length < 4) {
     throw new Error(`Lista insuficiente: solo ${completos.length} temas con audio`)
@@ -349,7 +292,7 @@ export async function prepararPartida(
 
 // ==================== Búsqueda libre (el host arma su lista) ====================
 
-export type TipoBusqueda = 'album' | 'artista' | 'lista'
+export type TipoBusqueda = 'album' | 'artista'
 export interface ResultadoBusqueda {
   tipo: TipoBusqueda
   id: number
@@ -359,16 +302,6 @@ export interface ResultadoBusqueda {
 }
 
 function mapResultado(r: any, tipo: TipoBusqueda): ResultadoBusqueda | null {
-  if (tipo === 'lista') {
-    if (!r || typeof r.title !== 'string' || !Number.isFinite(Number(r.id))) return null
-    return {
-      tipo,
-      id: Number(r.id),
-      nombre: r.title,
-      subtitulo: `${r.nb_tracks ?? '?'} canciones`,
-      artworkUrl: r.picture_medium ?? r.picture_small ?? ''
-    }
-  }
   const nombre = tipo === 'album' ? r?.collectionName : r?.artistName
   if (!r || typeof nombre !== 'string' || !Number.isFinite(Number(tipo === 'album' ? r.collectionId : r.artistId))) {
     return null
@@ -382,14 +315,10 @@ function mapResultado(r: any, tipo: TipoBusqueda): ResultadoBusqueda | null {
   }
 }
 
-/**
- * Busca en iTunes (álbumes y artistas) y en Deezer (playlists).
- * Nota: las playlists solo existen en Deezer; como su API no envía CORS,
- * se leen por JSONP (<script>) en vez de fetch. iTunes va por fetch.
- */
+/** Busca álbumes y artistas en iTunes. */
 export async function buscarEnItunes(
   query: string,
-  tipos: TipoBusqueda[] = ['album', 'artista', 'lista'],
+  tipos: TipoBusqueda[] = ['album', 'artista'],
   country = 'ES'
 ): Promise<ResultadoBusqueda[]> {
   const q = query.trim()
@@ -416,13 +345,6 @@ export async function buscarEnItunes(
         .then((d) => ({ tipo: 'artista' as const, d }))
     )
   }
-  if (tipos.includes('lista')) {
-    peticiones.push(
-      jsonp<{ data?: any[] }>(`https://api.deezer.com/search/playlist?q=${term}&limit=8`)
-        .catch(() => null)
-        .then((d) => ({ tipo: 'lista' as const, d: d ? { results: d.data } : null }))
-    )
-  }
   if (peticiones.length === 0) return []
   const res = await Promise.all(peticiones)
   if (res.every((r) => !r.d)) throw new Error('No se pudo buscar (¿sin conexión?)')
@@ -436,11 +358,7 @@ export async function buscarEnItunes(
   return out
 }
 
-/**
- * Convierte un álbum, artista o playlist elegidos en rondas completas:
- * álbum → sus canciones por lookup; artista → sus top-canciones por search;
- * playlist (Deezer, vía JSONP) → sus tracks directos.
- */
+/** Convierte un álbum o artista de iTunes en rondas con audio. */
 export async function prepararPartidaBusqueda(
   sel: ResultadoBusqueda,
   numRondas: number,
@@ -449,7 +367,7 @@ export async function prepararPartidaBusqueda(
 ): Promise<PartidaLista> {
   const n = Math.max(4, Math.min(30, Math.trunc(numRondas) || 5))
   const cacheKey = `busq:${sel.tipo}:${sel.id}`
-  let crudos = leerCache(cacheKey)
+  let crudos = leerCache(cacheKey)?.items
   if (!crudos) {
     let candidatos: any[] = []
     try {
@@ -458,10 +376,6 @@ export async function prepararPartidaBusqueda(
           `https://itunes.apple.com/lookup?id=${sel.id}&country=${country}&entity=song`
         )
         candidatos = (d?.results ?? []).filter((r: any) => r?.wrapperType === 'track' && r?.kind === 'song')
-      } else if (sel.tipo === 'lista') {
-        const tracks = await fetchPlaylistDeezer(sel.id)
-        crudos = tracks
-        guardarCache(cacheKey, crudos)
       } else {
         const d = await fetchConReintentos(
           `https://itunes.apple.com/search?term=${encodeURIComponent(sel.nombre)}&media=music&entity=song&limit=30&country=${country}&attribute=artistTerm`
@@ -471,12 +385,9 @@ export async function prepararPartidaBusqueda(
     } catch {
       throw new Error('No se pudo descargar la selección (¿sin conexión?)')
     }
-    if (sel.tipo !== 'lista') {
-      crudos = candidatos.map(mapLookup).filter(Boolean) as Crudo[]
-      guardarCache(cacheKey, crudos)
-    }
+    crudos = candidatos.map(mapLookup).filter((c): c is Crudo => c !== null)
+    guardarCache(cacheKey, crudos)
   }
-  if (!crudos) throw new Error('No se pudo descargar la selección (¿sin conexión?)')
   const completos = crudos.filter((c) => !!c.previewUrl && (!opts.requireAnio || c.anio !== null))
   const descartados = crudos.length - completos.length
   if (completos.length < 4) {

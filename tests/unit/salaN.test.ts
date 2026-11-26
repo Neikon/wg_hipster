@@ -56,13 +56,14 @@ class Hub {
     nv.node = new SyncNode({
       salaId: 'abc123',
       selfId: id,
+      selfTransportId: transportId,
       selfName: nombre,
       isHost,
       hostId: isHost ? id : '',
       juegoId: 'hipster',
       initialGameState,
       getGameModule: (gid: string) => getGameModule(gid),
-      send: (msg: any) => this.enviar(id, msg),
+      send: (msg: any, to?: string) => this.enviar(id, msg, to),
       emit: () => {},
       now: () => this.now
     })
@@ -79,10 +80,10 @@ class Hub {
     this.cola.push({ at: this.now + delay, to: toTransport, msg, fromTransport })
   }
 
-  private enviar(fromId: string, msg: any) {
+  private enviar(fromId: string, msg: any, to?: string) {
     const from = [...this.nodos.values()].find((n) => n.id === fromId)!
     for (const destino of this.nodos.values()) {
-      if (destino.transportId === from.transportId) continue
+      if (destino.transportId === from.transportId || (to && destino.transportId !== to)) continue
       const pendientes = this.tirar.get(destino.transportId) ?? 0
       if (pendientes > 0) {
         this.tirar.set(destino.transportId, pendientes - 1)

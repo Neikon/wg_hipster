@@ -2,12 +2,14 @@ import { describe, it, expect, vi } from 'vitest'
 import { SyncNode } from '../../src/lib/net/syncEngine'
 import type { SyncEvent } from '../../src/lib/net/syncEngine'
 
-function makeNode(isHost: boolean, onSend: (m: any) => void, events: SyncEvent[]) {
+function makeNode(isHost: boolean, onSend: (m: any, to?: string) => void, events: SyncEvent[]) {
   const id = isHost ? 'host' : 'guest'
   return new SyncNode({
     salaId: 'abc123',
     selfId: id,
     selfName: id,
+    selfTransportId: `t-${id}`,
+    hostTransportId: 't-host',
     isHost,
     hostId: isHost ? id : '',
     juegoId: 'hipster',
@@ -22,7 +24,7 @@ describe('robustez sync', () => {
   it('repite el hello a los 2 s (eco contra pérdida)', () => {
     const enviados: any[] = []
     const node = makeNode(false, (m) => enviados.push(m), [])
-    node.peerJoined('t-otro')
+    node.peerJoined('t-host')
     expect(enviados.filter((m) => m.t === 'hello')).toHaveLength(1)
     node.tickSecond()
     expect(enviados.filter((m) => m.t === 'hello')).toHaveLength(1)
@@ -42,13 +44,30 @@ describe('robustez sync', () => {
       fullState: { phase: 'lobby', version: 1, gameId: 'hipster' },
       version: 1,
       hostId: 'host',
-      peers: [{ id: 'host', name: 'H', joinTime: 1 }],
-      joinOrder: ['host']
+      peers: [{ id: 'host', name: 'Host', joinTime: 1, transportId: 't-host' },
+        { id: 'guest', name: 'Guest', joinTime: 2, transportId: 't-guest' }],
+      revision: 1,
+      gameRun: 0,
+      joinOrder: ['host', 'guest']
     }
+    node.receive(sync, 't-stranger')
+    expect(node.snapshot().syncedOnce).toBe(false)
     node.receive(sync, 't-host')
     node.receive(sync, 't-host')
     expect(events.filter((e) => e.t === 'synced')).toHaveLength(1)
     expect(node.snapshot().syncedOnce).toBe(true)
+  })
+
+  it('solo admite un jugador por conexión y avisa exclusivamente al nuevo si la sala está llena', () => {
+    const enviados: Array<[any, string | undefined]> = []
+    const host = makeNode(true, (msg, to) => enviados.push([msg, to]), [])
+    for (let i = 1; i <= 21; i++) {
+      host.receive({ t: 'hello', peerId: `j${i}`, name: `Jugador ${i}`, joinTime: i }, `t-${i}`)
+    }
+    host.receive({ t: 'hello', peerId: 'j19', name: 'Jugador 19', joinTime: 19 }, 't-19')
+    host.receive({ t: 'hello', peerId: 'otro', name: 'Otro', joinTime: 19 }, 't-19')
+    expect(host.snapshot().peers).toHaveLength(20)
+    expect(enviados.filter(([msg]) => msg.t === 'roomFull').map(([, to]) => to)).toEqual(['t-20', 't-21'])
   })
 
   it('tras perder hellos, el eco permite al host registrar al invitado', () => {

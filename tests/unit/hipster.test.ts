@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createInitialState, margenPara, pistasPara, reducer } from '../../src/lib/game/hipster/engine'
 import { TRACKS, mostrarAlbum, pistaTitulo } from '../../src/lib/game/hipster/tracks'
-import { LISTAS, LISTA_FALLBACK, buscarEnItunes, getLista, mapTrackDeezer, prepararPartida, prepararPartidaBusqueda } from '../../src/lib/game/hipster/listas'
+import { LISTAS, LISTA_FALLBACK, buscarEnItunes, getLista, prepararPartida, prepararPartidaBusqueda } from '../../src/lib/game/hipster/listas'
 import type { HipsterTrack } from '../../src/lib/game/hipster/types'
 
 const host = { isHost: true, peerId: 'host1' }
@@ -344,7 +344,11 @@ describe('hipster engine', () => {
 })
 
 describe('listas', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+    sessionStorage.clear()
+  })
 
   it('catálogo fijo con las 6 listas (clásicos solo como fallback)', () => {
     expect(LISTAS.map((l) => l.id)).toEqual([
@@ -418,6 +422,38 @@ describe('listas', () => {
     await expect(prepararPartida('top-pop', 5)).rejects.toThrow(/insuficiente/i)
   })
 
+  it('amplía el chart cacheado al pedir más rondas con año', async () => {
+    vi.useFakeTimers()
+    const entradas = Array.from({ length: 30 }, (_, index) => ({
+      id: { attributes: { 'im:id': String(index + 1) } },
+      'im:name': { label: `Tema ${index + 1}` },
+      'im:artist': { label: 'Artista' }
+    }))
+    const buscar = vi.fn(async (url: string) => {
+      if (url.includes('/rss/')) return { ok: true, json: async () => ({ feed: { entry: entradas } }) }
+      const id = Number(new URL(url).searchParams.get('id'))
+      const track = {
+        trackId: id,
+        trackName: `Tema ${id}`,
+        artistName: 'Artista',
+        previewUrl: `https://ejemplo.test/${id}.m4a`,
+        ...(id > 10 ? { releaseDate: '2005-01-01' } : {})
+      }
+      return { ok: true, json: async () => ({ results: [track] }) }
+    })
+    vi.stubGlobal('fetch', buscar)
+    const corta = prepararPartida('top-rock', 5)
+    await vi.runAllTimersAsync()
+    expect((await corta).tracks).toHaveLength(5)
+    const [larga] = await Promise.all([
+      prepararPartida('top-rock', 20, { requireAnio: true }),
+      vi.runAllTimersAsync()
+    ])
+    expect(larga.tracks).toHaveLength(20)
+    expect(larga.tracks.every((track) => track.anio === 2005)).toBe(true)
+    expect(buscar).toHaveBeenCalledTimes(31)
+  })
+
   it('buscarEnItunes respeta el filtro por tipo', async () => {
     const llamadas: string[] = []
     vi.stubGlobal(
@@ -468,21 +504,6 @@ describe('listas', () => {
     const r = await prepararPartidaBusqueda({ tipo: 'album', id: 11, nombre: 'Álbum', subtitulo: '', artworkUrl: '' }, 5)
     expect(r.tracks).toHaveLength(5)
     for (const t of r.tracks) expect(t.previewUrl).toMatch(/^https:\/\//)
-  })
-
-  it('mapTrackDeezer mapea tracks de playlist', () => {
-    const m = mapTrackDeezer({
-      id: 7,
-      title: 'Tema P',
-      artist: { name: 'Art P' },
-      album: { title: 'Alb', cover_medium: 'https://cover' },
-      preview: 'https://clip.mp3',
-      release_date: '2005-11-21'
-    })
-    expect(m).toMatchObject({ trackId: 7, titulo: 'Tema P', artista: 'Art P', previewUrl: 'https://clip.mp3', anio: 2005 })
-    expect(mapTrackDeezer({ id: 8, title: 'Sin audio', artist: { name: 'X' }, preview: '' })?.previewUrl).toBe('')
-    expect(mapTrackDeezer({ id: 9, title: 'Sin fecha', artist: { name: 'X' }, preview: 'https://clip.mp3' })?.anio).toBeNull()
-    expect(mapTrackDeezer(null)).toBeNull()
   })
 
   it('el fixture trae año en todos los temas', () => {

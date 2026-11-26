@@ -142,15 +142,14 @@ function cargarImagen(url: string): Promise<HTMLImageElement> {
 
 /**
  * Tinte para una carátula: fondo adaptado al tema + acento con contraste AA.
- * `tema` es 'light' | 'dark'. Cacheado por trackId. null si falla.
+ * `tema` es 'light' | 'dark'. Cacheado por URL de carátula. null si falla.
  */
 export async function tinteDeCaratula(
   artworkUrl: string,
-  trackId: number,
   tema: 'light' | 'dark'
 ): Promise<Tinte | null> {
   if (!artworkUrl) return null
-  const claveCache = `${trackId}:${tema}`
+  const claveCache = `${tema}:${artworkUrl}`
   const hit = cache.get(claveCache)
   if (hit !== undefined) return hit
   try {

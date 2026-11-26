@@ -7,13 +7,3 @@ export interface BaseGameState {
 }
 
 export const gameStore = writable<BaseGameState>({ phase: 'lobby', version: 0, gameId: 'hipster' })
-
-export function applyStateSync(newState: any) {
-  // solo aplicar si version mayor (evita split-brain)
-  gameStore.update(cur => {
-    if (newState.version !== undefined && cur.version !== undefined) {
-      if (newState.version <= cur.version) return cur
-    }
-    return newState
-  })
-}

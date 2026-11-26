@@ -134,6 +134,6 @@ http://localhost:5173/wg_hipster/#/sala/prueba?host=1&name=Ana
 
 El repo trae un solo juego registrado: al abrir la sala verás el tuyo.
 Los ids de sala reales tienen seis caracteres; `prueba` es válido para este ejemplo.
-Comprueba también dos pestañas con el enlace que muestra el lobby. La prueba automatizada
-P2P real se exige con `E2E_P2P=1 npm run test:e2e`; necesita salida a los trackers
-públicos de Trystero.
+Comprueba también dos pestañas con el enlace que muestra el lobby. `npm run test:e2e`
+prueba el protocolo con WebRTC real y un tracker local. `E2E_PUBLIC=2` añade una
+sala de dos jugadores en los trackers públicos.

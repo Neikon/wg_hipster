@@ -20,5 +20,12 @@ export interface GameModule<S extends GameState = GameState, A = { t: string }> 
   nombre: string
   createInitialState(peers: GamePeer[], config?: any): S
   reducer(state: S, action: A, ctx: GameContext): S
+  replication?: GameReplication<S>
   Component?: any
+}
+
+export interface GameReplication<S> {
+  publicState(state: S, peerId: string): S
+  recovery(state: S): { state: Partial<S>; deck: Partial<S> }
+  validState(state: unknown): state is S
 }

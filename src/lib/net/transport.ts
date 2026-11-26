@@ -1,3 +1,5 @@
+import { hashQuery } from './signaling'
+
 /**
  * Trackers WebSocket (WebTorrent) para señalización, sin cuentas ni backend.
  * Verificados por sonda real el 2026-09-09: solo `openwebtorrent` retransmite
@@ -18,25 +20,25 @@ export const TRACKER_URLS: readonly string[] = [
 
 export const RELAY_REDUNDANCY = 5
 
-/**
- * Hook solo para tests e2e: `?tracker=ws://...` (repetible) en el hash de la
- * sala redirige la señalización a trackers locales. Sin ese parámetro, la
- * ruta de producción queda intacta (misma clave relayUrls, mismos defaults).
- */
-export function trackerUrls(): string[] {
-  try {
-    if (typeof location !== 'undefined' && typeof location.hash === 'string') {
-      const q = new URLSearchParams(location.hash.split('?')[1] || '')
-      const list = q
-        .getAll('tracker')
-        .map((s) => s.trim())
-        .filter(Boolean)
-      if (list.length > 0) return list
+const loopbackHosts = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/** Los trackers de pruebas solo se aceptan desde páginas y servidores locales. */
+export function trackerOverrides(): string[] {
+  if (!loopbackHosts.has(globalThis.location?.hostname ?? '')) return []
+  return [...new Set(hashQuery().getAll('tracker').filter((value) => {
+    try {
+      const url = new URL(value)
+      return loopbackHosts.has(url.hostname) && ['ws:', 'wss:'].includes(url.protocol) &&
+        !url.username && !url.password
+    } catch {
+      return false
     }
-  } catch {
-    // sin location (SSR / tests unitarios en node): defaults de producción
-  }
-  return [...TRACKER_URLS]
+  }))]
+}
+
+export function trackerUrls(): string[] {
+  const overrides = trackerOverrides()
+  return overrides.length ? overrides : [...TRACKER_URLS]
 }
 
 export const STUN_URLS: readonly string[] = [

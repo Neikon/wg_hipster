@@ -1,17 +1,26 @@
 <script lang="ts">
   import { qrParaSala } from '../lib/utils/qr'
   import { DEFAULT_GAME_ID } from '../lib/game/registry'
+  import { signalingParams, type Estrategia, type SupaConf } from '../lib/net/signaling'
+  import { trackerOverrides } from '../lib/net/transport'
   export let salaId: string
   export let juegoId: string = DEFAULT_GAME_ID
+  export let estrategia: Estrategia = 'torrent'
+  export let supa: SupaConf | null = null
+  export let hostTransportId = ''
   let copied=false
   let showQR=false
-  // Derivar de la ruta real servida (no de BASE_URL en build) para que el
-  // enlace y el QR funcionen en dev, preview y Pages sin apuntar a otro sitio.
-  $: suffix = juegoId && juegoId !== DEFAULT_GAME_ID ? `?juego=${juegoId}` : ''
-  $: link = typeof location !== 'undefined'
-    ? `${location.origin}${location.pathname}#/sala/${salaId}${suffix}`
-    : ''
-  $: qrUrl = qrParaSala(link)
+  $: {
+    const q = signalingParams(estrategia, supa)
+    if (juegoId && juegoId !== DEFAULT_GAME_ID) q.set('juego', juegoId)
+    if (hostTransportId) q.set('anfitrion', hostTransportId)
+    if (estrategia === 'torrent') {
+      for (const tracker of trackerOverrides()) q.append('tracker', tracker)
+    }
+    link = `${location.origin}${location.pathname}#/sala/${salaId}?${q}`
+  }
+  let link = ''
+  $: qrUrl = showQR ? qrParaSala(link) : ''
   async function copy(){
     try{ await navigator.clipboard.writeText(link); copied=true; setTimeout(()=>copied=false,1500)}catch{ prompt('Copia el enlace:', link)}
   }

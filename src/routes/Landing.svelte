@@ -1,6 +1,7 @@
 <script lang="ts">
   import { generateSalaId } from '../lib/utils/id'
   import { randomName, sanitizeName } from '../lib/utils/names'
+  import { trackerOverrides } from '../lib/net/transport'
   import ThemeToggle from '../components/ThemeToggle.svelte'
   import KoFi from '../components/KoFi.svelte'
   let name = randomName()
@@ -9,7 +10,9 @@
     const s = sanitizeName(name)
     if (!s){ error='Nombre 2-20 caracteres'; return }
     const id = generateSalaId()
-    location.hash = `#/sala/${id}?host=1&name=${encodeURIComponent(s)}`
+    const q = new URLSearchParams({ host: '1', name: s })
+    for (const tracker of trackerOverrides()) q.append('tracker', tracker)
+    location.hash = `#/sala/${id}?${q}`
   }
   function onInput(e:Event){
     name = (e.target as HTMLInputElement).value

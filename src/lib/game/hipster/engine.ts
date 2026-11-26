@@ -215,7 +215,7 @@ export function reducer(
     if (state.config.modo === 'anio') {
       // año escrito a mano: 1900–2100
       if (!Number.isInteger(action.opcion) || action.opcion < 1900 || action.opcion > 2100) return state
-    } else if (action.opcion < 0 || action.opcion > 3) {
+    } else if (!Number.isInteger(action.opcion) || action.opcion < 0 || action.opcion >= state.opciones.length) {
       return state
     }
     if (!cambiable || state.respuestas[ctx.peerId] !== action.opcion) {
@@ -235,6 +235,7 @@ export function reducer(
     if (!esExperto(state.config)) return state
     if (state.respuestas[ctx.peerId] !== undefined) return state
     if (state.timer <= 0) return state
+    if (typeof action.texto !== 'string') return state
     const texto = action.texto.trim().slice(0, 140)
     if (!texto) return state
     const respuestas = { ...state.respuestas, [ctx.peerId]: texto }

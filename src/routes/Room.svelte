@@ -3,12 +3,12 @@
   import { roomStore, initRoom } from '../lib/stores/roomStore'
   import { gameStore } from '../lib/stores/gameStore'
   import { randomName, sanitizeName } from '../lib/utils/names'
-  import { joinTrystero, relayStatus } from '../lib/net/trysteroAdapter'
-  import { readTurnServers, refreshTurnServers, turnApiUrl, guardarTurnApi, type TurnServer } from '../lib/net/turn'
-  import { signalingStrategy, guardarEstrategia, supaConf, guardarSupa, type Estrategia } from '../lib/net/signaling'
+  import { joinTrystero, relayStatus, transportSelfId, type TrysteroRoom } from '../lib/net/trysteroAdapter'
+  import { readTurnServers, refreshTurnServers, turnApiUrl, guardarTurnApi } from '../lib/net/turn'
+  import { signalingStrategy, guardarEstrategia, supaConf, guardarSupa, hashQuery, signalingParams, guestRecovery, MAX_HARD_RELOADS, type Estrategia, type SupaConf } from '../lib/net/signaling'
   import { debugLog, downloadText, installConsoleCapture, installBroadcastProbe, necesitaReanuncio } from '../lib/net/debug'
   import { diagnosticarRed } from '../lib/net/iceCheck'
-  import { buildRtcConfig } from '../lib/net/transport'
+  import { buildRtcConfig, trackerUrls } from '../lib/net/transport'
   import { SyncNode } from '../lib/net/syncEngine'
   import type { SyncEvent } from '../lib/net/syncEngine'
   import { DEFAULT_GAME_ID, getGameModule } from '../lib/game/registry'
@@ -22,21 +22,21 @@
   import type { Tinte } from '../lib/game/hipster/colores'
   import { mezclarHex, textoSobre } from '../lib/game/hipster/colores'
 
-  function genId() { return Math.random().toString(36).slice(2, 9) }
-
   let salaId = ''
   let isHostParam = false
   let initialName = ''
   let initialSegundos: number | undefined = undefined
   // El campo juegoId se mantiene en el protocolo para robustez entre versiones.
   let juegoId = DEFAULT_GAME_ID
-  let trystero: any = null
+  let trystero: TrysteroRoom | null = null
+  let disposed = false
   let node: SyncNode | null = null
   let unsubRoom: any
   let unsubGame: any
   let joinOrder: string[] = []
   let selfId = ''
   let hostId = ''
+  let hostTransportId = ''
   let isHost = false
   let peers: any[] = []
   let gameState: any = { phase:'lobby', version:0, gameId: DEFAULT_GAME_ID }
@@ -44,22 +44,25 @@
   let toast = ''
   let secondInt: any = null
   let watch: any = null
-  // Estrategia de señalización (torrent por defecto; supabase si hay config).
   let estrategia: Estrategia = 'torrent'
-  // TURN (datos móviles): URL del endpoint + estado para el lobby.
+  let supaActiva: SupaConf | null = null
   let supaUrlTxt = ''
   let supaKeyTxt = ''
   let supaMsg = ''
-  function guardarEstrategiaUI(e: Estrategia) {
-    estrategia = e
+  function cambiarEstrategia(e: Estrategia, supa: SupaConf | null = null) {
+    const q = hashQuery()
+    q.delete('supaUrl')
+    q.delete('supaKey')
+    for (const [key, value] of signalingParams(e, supa)) q.set(key, value)
     guardarEstrategia(e)
-    showToast(e === 'supabase' ? 'Señalización: Supabase (recarga la sala para usarla)' : 'Señalización: trackers')
+    history.replaceState(null, '', `#/sala/${salaId}?${q}`)
+    location.reload()
   }
   function guardarSupaUI() {
     if (guardarSupa(supaUrlTxt, supaKeyTxt)) {
-      location.reload()
+      cambiarEstrategia('supabase', { url: supaUrlTxt, key: supaKeyTxt })
     } else {
-      supaMsg = 'Revisa URL (https://…) y clave (mín. 10 caracteres).'
+      supaMsg = 'Introduce la URL HTTPS del proyecto y una clave publicable o anon.'
     }
   }
   let turnApiTxt = ''
@@ -120,8 +123,11 @@
   }
   let synced = false
   let joinedAt = 0
+  let esperandoDesde = 0
   let rejoining = false
-  const REJOIN_MS = 12000
+  let recuperacionAgotada = false
+  let connectionError = ''
+  let configuracionInvalida = false
   // Señalización (trackers): X de Y sockets abiertos. Con 0 abiertos la sala
   // es fantasma —la malla de datos vive pero nadie nuevo puede entrar—.
   // El aviso de fantasma lleva gracia inicial: al cargar, los sockets tardan
@@ -134,7 +140,7 @@
   let ahora = Date.now()
   function actualizarRelays(){
     try {
-      const st = relayStatus()
+      const st = relayStatus(trackerUrls())
       relaysTotal = st.length
       relaysAbiertos = st.filter((s)=>s.open).length
       for (const s of st) {
@@ -151,9 +157,10 @@
     const hash = location.hash // #/sala/abcd12?host=1&name=...
     const m = hash.match(/#\/sala\/([a-z0-9]{6})/)
     salaId = m ? m[1] : ''
-    const q = new URLSearchParams(hash.split('?')[1] || '')
+    const q = hashQuery(hash)
     isHostParam = q.get('host') === '1'
-    initialName = q.get('name') ? decodeURIComponent(q.get('name')!) : ''
+    initialName = q.get('name') ?? ''
+    hostTransportId = isHostParam ? transportSelfId : q.get('anfitrion') ?? ''
     debug = q.get('debug') === '1'
     const j = q.get('juego')
     if (j && getGameModule(j)) juegoId = j
@@ -168,6 +175,7 @@
   function onSyncEvent(e: SyncEvent){
     if (e.t === 'room') {
       peers = e.peers; joinOrder = e.joinOrder; hostId = e.hostId; isHost = e.isHost
+      hostTransportId = e.hostTransportId
       roomStore.update(v=>({...v, peers, joinOrder, hostId, isHost, selfName: e.selfName}))
     } else if (e.t === 'game') {
       gameState = e.state
@@ -180,7 +188,8 @@
       debugLog.log('sala', 'sala llena')
     } else if (e.t === 'synced') {
       synced = true
-      rejoining = false
+      salaFull = false
+      connectionError = ''
       try {
         const n = node?.snapshot().peers.length ?? peers.length
         debugLog.log('sala', `sincronizado (peers=${n})`)
@@ -189,43 +198,96 @@
     }
   }
 
-  function wireTransport(){
-    if (!trystero || !node) return
-    trystero.get((msg:any, peerId:string)=> {
-      try {
-        debugLog.log('proto', `← ${msg?.t ?? '?'} de ${peerId} (${JSON.stringify(msg ?? null).length}B)`)
-      } catch { /* log best-effort */ }
+  function wireTransport(room: TrysteroRoom) {
+    room.get((msg: any, peerId: string) => {
+      if (trystero !== room) return
+      if (debug) debugLog.log('proto', `← ${msg?.t ?? '?'} de ${peerId} (${JSON.stringify(msg ?? null).length}B)`)
       node?.receive(msg, peerId)
     })
-    trystero.onPeerJoin((id:string)=> {
+    room.onPeerJoin((id) => {
+      if (trystero !== room) return
       debugLog.log('red', `peer transporte unido: ${id}`)
       node?.peerJoined(id)
     })
-    trystero.onPeerLeave((transportPeerId:string)=> {
-      debugLog.log('red', `peer transporte fuera: ${transportPeerId}`)
-      node?.peerLeft(transportPeerId)
+    room.onPeerLeave((id) => {
+      if (trystero !== room) return
+      debugLog.log('red', `peer transporte fuera: ${id}`)
+      node?.peerLeft(id)
     })
   }
 
-  /** Reconexión: salir y volver a entrar para re-anunciarse en los trackers. */
-  async function reconectar(motivo: string){
-    if (!node || rejoining) return
+  /** Sale de la conexión anterior y vuelve a anunciarse con el mismo nodo. */
+  async function reconectar(motivo = '') {
+    if (!node || rejoining || disposed || configuracionInvalida) return
     rejoining = true
-    showToast(motivo)
-    debugLog.log('red', `reconexión: ${motivo}`)
-    try { trystero?.leave() } catch {}
-    // el rejoin recoge TURN recién cacheados (el refresco corre en fondo)
-    refreshTurnServers().catch(() => {})
+    if (motivo) {
+      showToast(motivo)
+      debugLog.log('red', `reconexión: ${motivo}`)
+    }
+    const anterior = trystero
+    trystero = null
     try {
-      trystero = await joinTrystero(salaId, readTurnServers(), estrategia, supaConf())
-      wireTransport()
+      await anterior?.leave()
+      if (disposed) return
+      const cache = readTurnServers()
+      const refresh = refreshTurnServers()
+      const turn = cache.length ? cache : await refresh
+      if (disposed) return
+      const room = await joinTrystero(salaId, turn, estrategia, supaActiva)
+      if (disposed) {
+        await room.leave()
+        return
+      }
+      trystero = room
+      if (!recuperacionAgotada) connectionError = ''
+      wireTransport(room)
       node.start()
-    } catch {
-      showToast('Error conectando P2P')
+    } catch (e) {
+      if (disposed) return
+      if (!recuperacionAgotada) {
+        connectionError = 'No se pudo abrir la conexión P2P. Revisa la red y vuelve a intentarlo.'
+      }
+      debugLog.log('red', `No se pudo abrir la conexión: ${String(e)}`)
     } finally {
       joinedAt = Date.now()
-      setTimeout(()=>{ rejoining = false }, 3000)
+      rejoining = false
+      actualizarRelays()
     }
+  }
+
+  function reintentarManual() {
+    if (recuperacionAgotada) {
+      recuperacionAgotada = false
+      esperandoDesde = Date.now()
+      try { sessionStorage.removeItem(`wg_hipster:reloads:${salaId}`) } catch {}
+    }
+    void reconectar('Reintentando conexión…')
+  }
+
+  function startWatch() {
+    const reloadKey = `wg_hipster:reloads:${salaId}`
+    watch = setInterval(() => {
+      if (isHost || synced || salaFull || recuperacionAgotada || configuracionInvalida) return
+      let reloads = MAX_HARD_RELOADS
+      try { reloads = Number(sessionStorage.getItem(reloadKey)) || 0 } catch {}
+      const now = Date.now()
+      const sinTrackers = estrategia === 'torrent' && relaysAbiertos === 0
+      const tarea = guestRecovery(now - esperandoDesde, now - joinedAt, reloads, sinTrackers)
+      if (tarea === 'reload') {
+        try {
+          sessionStorage.setItem(reloadKey, String(reloads + 1))
+          debugLog.log('sys', 'recarga dura por falta de sync')
+          location.reload()
+          return
+        } catch { /* con storage bloqueado, termina aquí sin recargar */ }
+      }
+      if (tarea === 'reload' || tarea === 'failed') {
+        recuperacionAgotada = true
+        connectionError = 'No se pudo entrar en la sala. Pide al anfitrión que vuelva a compartir el enlace.'
+      } else if (tarea === 'retry') {
+        void reconectar(sinTrackers ? 'Sin señalización, reintentando…' : 'Conexión lenta, reintentando…')
+      }
+    }, 2000)
   }
 
   function startSecondTick(){
@@ -243,11 +305,10 @@
   onMount(()=>{
     parseHash()
     if (!salaId) { location.hash = '#/'; return }
-    let cancelled = false
     estrategia = signalingStrategy()
-    try {
-      if (new URLSearchParams(location.hash.split('?')[1] || '').get('net')) guardarEstrategia(estrategia)
-    } catch { /* persistencia best-effort */ }
+    supaActiva = estrategia === 'supabase' ? supaConf() : null
+    configuracionInvalida = estrategia === 'supabase' && !supaActiva
+    if (configuracionInvalida) connectionError = 'Falta una configuración válida de Supabase para esta sala.'
     if (debug) {
       let recargas = 0
       try { recargas = parseInt(sessionStorage.getItem(`wg_hipster:reloads:${salaId}`) || '0', 10) || 0 } catch { /* sin storage */ }
@@ -266,7 +327,7 @@
           } else if (ocultoDesde !== null) {
             const ms = Date.now() - ocultoDesde
             ocultoDesde = null
-            if (necesitaReanuncio(ms, isHost, peers.length)) {
+            if (!recuperacionAgotada && necesitaReanuncio(ms, isHost, peers.length)) {
               debugLog.log('sys', `vuelta de segundo plano tras ${Math.round(ms / 1000)}s: re-anuncio`)
               void reconectar('Conexión pausada, reintentando…')
             }
@@ -323,113 +384,35 @@
       gameState = { phase: 'lobby', version: 0, gameId: juegoId }
     }
 
-    // La entrada es async (TURN puede esperar ≤4 s); el cleanup va por `release`
-    // porque onMount sync no puede devolver lo de dentro de la promesa.
-    let release: (() => void) | undefined
-    const entrar = async () => {
-    // TURN (datos móviles): lectura síncrona de caché; si hay API configurada
-    // pero nada cacheado, se espera al refresco (≤4 s). Sin TURN, inmediato.
-    refreshTurnServers().catch(() => {})
-    let turn: TurnServer[] = readTurnServers()
-    if (turn.length === 0 && turnApiUrl()) {
-      showToast('Obteniendo TURN…')
-      turn = await refreshTurnServers().catch(() => [] as TurnServer[])
-      turnCount = readTurnServers().length
-    }
-    const supa = estrategia === 'supabase' ? supaConf() : null
-    if (estrategia === 'supabase' && !supa) {
-      showToast('Sin config Supabase: se usa trackers')
-      debugLog.log('sys', 'supabase sin config: fallback a torrent')
-      estrategia = 'torrent'
-    }
-    if (cancelled) return
-
-    // conectar Trystero
-    try {
-      trystero = await joinTrystero(freshSalaId, turn, estrategia, supa)
-    } catch(e){
-      console.error('Trystero error', e)
-      showToast('Error conectando P2P')
-      return
-    }
-
-    // nodo de protocolo: recibe mensajes, emite snapshots a los stores
     node = new SyncNode({
       salaId: freshSalaId,
       selfId,
+      selfTransportId: transportSelfId,
       selfName: nameToUse,
       isHost: isHostParam,
       hostId: isHostParam ? selfId : '',
+      hostTransportId,
       juegoId,
       initialGameState: gameState,
-      getGameModule: (id: string) => getGameModule(id),
-      send: (msg: any) => {
-        try {
-          debugLog.log('proto', `→ ${msg?.t ?? '?'} (${JSON.stringify(msg ?? null).length}B)`)
-        } catch { /* log best-effort */ }
-        trystero.send(msg)
+      getGameModule,
+      send: (msg, transportPeerId) => {
+        if (debug) debugLog.log('proto', `→ ${msg?.t ?? '?'} (${JSON.stringify(msg ?? null).length}B)`)
+        trystero?.send(msg, transportPeerId)
       },
       emit: onSyncEvent
     })
-    {
-      const snap = node.snapshot()
-      peers = snap.peers; joinOrder = snap.joinOrder; hostId = snap.hostId; isHost = snap.isHost
-      roomStore.update(v=>({...v, peers, joinOrder, hostId, isHost}))
-    }
+    const snap = node.snapshot()
+    peers = snap.peers; joinOrder = snap.joinOrder; hostId = snap.hostId; isHost = snap.isHost
+    roomStore.update(v=>({...v, peers, joinOrder, hostId, isHost}))
 
-    // manejar mensajes
-    wireTransport()
-
-    // pulso de 1 s para el nodo (tick de juego, heartbeat, reintento de sync)
+    joinedAt = esperandoDesde = Date.now()
     startSecondTick()
-
-    // el invitado pide estado al entrar; si tarda, el nodo reintenta solo
-    node?.start()
-    debugLog.log('proto', isHostParam ? 'host listo' : 'requestState inicial')
-    joinedAt = Date.now()
-    actualizarRelays()
-
-    // watchdog: invitado sin sincronizar >12 s → re-anunciarse en trackers
-    // (la reconexión crea sockets nuevos y resetea el backoff de Trystero).
-    // Si además no hay ningún tracker abierto, no se esperan los 12 s.
-    // Último recurso: recarga dura topada. El pool de ofertas de Trystero es
-    // global a la página y no se limpia al reconectar en caliente: solo una
-    // recarga (contexto JS nuevo) lo sanea. Topado para no ciclar si la sala
-    // ya no existe; al sincronizar se resetea el contador.
-    const HARD_RELOAD_MS = 30000
-    const MAX_HARD_RELOADS = 2
-    const reloadKey = `wg_hipster:reloads:${freshSalaId}`
-    const reloadsHechas = () => {
-      try { return parseInt(sessionStorage.getItem(reloadKey) || '0', 10) || 0 } catch { return MAX_HARD_RELOADS }
-    }
-    watch = setInterval(()=>{
-      if (!node) return
-      const snap = node.snapshot()
-      if (!snap.isHost && !snap.syncedOnce && Date.now() - joinedAt > REJOIN_MS) {
-        void reconectar('Conexión lenta, reintentando…')
-      } else if (!snap.isHost && !snap.syncedOnce && estrategia === 'torrent' && relaysTotal > 0 && relaysAbiertos === 0 && Date.now() - joinedAt > 5000) {
-        void reconectar('Sin señalización, reintentando…')
-      } else if (!snap.isHost && !snap.syncedOnce && Date.now() - joinedAt > HARD_RELOAD_MS && reloadsHechas() < MAX_HARD_RELOADS) {
-        try { sessionStorage.setItem(reloadKey, String(reloadsHechas() + 1)) } catch {}
-        debugLog.log('sys', 'recarga dura por falta de sync')
-        location.reload()
-      }
-    }, 2000)
-
-    release = ()=>{
-      limpiarDebug()
-      if (watch) clearInterval(watch)
-      if (trystero) trystero.leave()
-    }
-    }
-    void entrar()
-    return ()=>{
-      cancelled = true
-      release?.()
-    }
+    startWatch()
+    void reconectar()
   })
 
   onDestroy(()=>{
+    disposed = true
     limpiarDebug()
     if (unsubRoom) unsubRoom()
     if (unsubGame) unsubGame()
@@ -437,7 +420,9 @@
     tinteActual.set(null)
     if (secondInt) clearInterval(secondInt)
     if (watch) clearInterval(watch)
-    if (trystero) trystero.leave()
+    const room = trystero
+    trystero = null
+    void room?.leave().catch(() => {})
   })
 
   function onRename(e:CustomEvent){
@@ -451,7 +436,6 @@
   }
 
   function salir(){
-    if (trystero) trystero.leave()
     location.hash = '#/'
   }
 
@@ -532,10 +516,12 @@
 >
   {#if toast}<div style="background:var(--success);color:var(--bg);padding:0.6rem 1rem;border-radius:8px;margin:1rem 0">{toast}</div>{/if}
   {#if salaFull}<div style="background:var(--error);color:white;padding:0.6rem 1rem;border-radius:8px;margin:1rem 0">Sala llena (20 jugadores)</div>{/if}
-  {#if !isHost && !synced}
+  {#if connectionError || (!isHost && !synced && !salaFull)}
     <div style="background:var(--accent);color:var(--bg);padding:0.6rem 1rem;border-radius:8px;margin:1rem 0;display:flex;gap:0.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
-      <span>Conectando con la sala…{rejoining ? ' reintentando' : ''}</span>
-      <button on:click={()=>void reconectar('Reintentando conexión…')} disabled={rejoining} style="background:var(--bg);color:var(--fg);padding:0.3rem 0.7rem;font-size:0.85rem">Reintentar</button>
+      <span role="status">{connectionError || 'Conectando con la sala…'}</span>
+      {#if !configuracionInvalida}
+        <button on:click={reintentarManual} disabled={rejoining} style="background:var(--bg);color:var(--fg);padding:0.3rem 0.7rem;font-size:0.85rem">Reintentar</button>
+      {/if}
     </div>
   {/if}
 
@@ -546,7 +532,7 @@
       <span style="display:flex;gap:0.5rem"><ThemeToggle /><button on:click={salir} style="background:var(--muted)">Salir</button></span>
     </div>
 
-    <ShareLink {salaId} {juegoId} />
+    <ShareLink {salaId} {juegoId} {estrategia} supa={supaActiva} {hostTransportId} />
 
     {#if estrategia === 'torrent' && relaysTotal > 0}
       <p class="muted" style="font-size:0.8rem;margin:0.4rem 0 0">Señalización: {relaysAbiertos}/{relaysTotal} trackers</p>
@@ -556,7 +542,7 @@
     {#if !debug}
       <p style="margin:0.2rem 0 0"><button on:click={activarDebug} style="background:none;border:none;padding:0;margin:0;min-height:0;font-size:0.8rem;font-weight:400;color:var(--muted);text-decoration:underline;cursor:pointer">depurar</button></p>
     {/if}
-    {#if isHost && estrategia === 'torrent' && relaysTotal > 0 && relaysAbiertos === 0 && ahora - joinedAt > SIN_SENAL_MS}
+    {#if isHost && estrategia === 'torrent' && !rejoining && relaysAbiertos === 0 && ahora - joinedAt > SIN_SENAL_MS}
       <div style="background:var(--error);color:white;padding:0.6rem 1rem;border-radius:8px;margin:0.6rem 0;display:flex;gap:0.6rem;align-items:center;justify-content:space-between;flex-wrap:wrap">
         <span>Sin conexión con los trackers: ningún jugador nuevo puede entrar. Recarga la página para re-anunciar la sala.</span>
         <button on:click={()=>location.reload()} style="background:white;color:var(--error);padding:0.3rem 0.7rem;font-size:0.85rem">Recargar</button>
@@ -573,18 +559,15 @@
     </details>
     <details style="margin-top:0.6rem;font-size:0.85rem">
       <summary class="muted" style="cursor:pointer">Señalización: {estrategia === 'supabase' ? 'Supabase' : 'trackers'}</summary>
-      <p class="muted">Supabase re-anuncia presencia cada pocos segundos: los tardíos encuentran sala aunque lleguen minutos después. Requiere un proyecto (gratis) configurado abajo; sin él se usan trackers.</p>
-      <div style="display:flex;gap:0.4rem;margin-bottom:0.4rem">
-        <button on:click={()=>guardarEstrategiaUI('torrent')} style="background:{estrategia === 'torrent' ? 'var(--accent)' : 'var(--muted)'};padding:0.3rem 0.7rem;font-size:0.85rem">Trackers</button>
-        <button on:click={()=>guardarEstrategiaUI('supabase')} style="background:{estrategia === 'supabase' ? 'var(--accent)' : 'var(--muted)'};padding:0.3rem 0.7rem;font-size:0.85rem">Supabase</button>
-      </div>
-      {#if estrategia === 'supabase'}
-        <div style="display:grid;gap:0.4rem">
-          <input bind:value={supaUrlTxt} placeholder="https://xxx.supabase.co" aria-label="URL del proyecto Supabase" style="width:100%" />
-          <input bind:value={supaKeyTxt} placeholder="Clave publicable (sb_publishable_…)" aria-label="Clave publicable Supabase" style="width:100%" />
-          <div><button on:click={guardarSupaUI} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Guardar y recargar</button></div>
-        </div>
+      <p class="muted">Los trackers públicos son la opción inicial. También puedes conectar un proyecto Supabase propio y compartir el enlace actualizado.</p>
+      {#if estrategia !== 'torrent'}
+        <button on:click={()=>cambiarEstrategia('torrent')} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Usar trackers</button>
       {/if}
+      <div style="display:grid;gap:0.4rem;margin-top:0.4rem">
+        <input bind:value={supaUrlTxt} placeholder="https://xxx.supabase.co" aria-label="URL del proyecto Supabase" style="width:100%" />
+        <input bind:value={supaKeyTxt} placeholder="Clave publicable (sb_publishable_…)" aria-label="Clave publicable Supabase" style="width:100%" />
+        <div><button on:click={guardarSupaUI} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Usar Supabase y recargar</button></div>
+      </div>
       {#if supaMsg}<p class="muted">{supaMsg}</p>{/if}
     </details>
     {#if debug}
@@ -604,6 +587,12 @@
       <span class="muted" style="font-size:0.85rem"><code>{salaId}</code></span>
       <button on:click={salir} style="background:var(--muted);padding:0.3rem 0.7rem;font-size:0.85rem">Salir</button>
     </div>
+    {#if isHost && !isHostParam}
+      <details>
+        <summary>Compartir sala</summary>
+        <ShareLink {salaId} {juegoId} {estrategia} supa={supaActiva} {hostTransportId} />
+      </details>
+    {/if}
   {/if}
 
   <!-- Una sola instancia de Game en ambas fases: va fuera de todo condicional
